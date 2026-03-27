@@ -268,3 +268,90 @@ The biggest wins are:
 2. Vectorize feature engineering (already proven: 30 min → 5 seconds)
 3. Migrate R to Python (eliminates dual-language complexity)
 4. Add missing xG/xA features (likely biggest accuracy improvement)
+
+---
+
+## Live Data Challenges — 2025-26 Season
+
+Investigation of the vaastav/Fantasy-Premier-League dataset and data collection infrastructure to assess feasibility of live weekly predictions.
+
+### 1. vaastav Repo No Longer Weekly-Updated
+
+The vaastav README explicitly states: **weekly updates stopped after 2024-25**. The new schedule is only 3 bulk updates per season:
+- Start of season
+- End of January transfer window
+- End of season
+
+As of 2026-03-27, the repo has data through GW29 (last commit: 2026-03-13). This means data can be **2+ weeks stale** during the season. The pipeline cannot rely on vaastav for current-season data if used for live predictions.
+
+vaastav remains valuable for **historical seasons** (2016-17 through 2024-25).
+
+### 2. xP (Expected Points) Files Are Sparse
+
+Only **10 of 29 GWs** have xP files for 2025-26:
+
+| Present | Missing |
+|---------|---------|
+| GW 1-6, 8-9, 24, 29 | GW 7, 10-23, 25-28 |
+
+The xP value comes from the FPL API's `ep_this` field in `/api/bootstrap-static/`. It is a **forward-looking prediction** — only meaningful if scraped **before the GW deadline**. Once the GW plays, the field updates to next week's prediction. The sporadic coverage reflects the 3-update-per-season cadence: xP was captured only at the times vaastav ran the scraper.
+
+### 3. No Understat Data for 2025-26
+
+The `understat/` directory does not exist for 2025-26. It exists for 2024-25 (with full player match data).
+
+The scraper in `understat.py` (both `src/data_collection/` and vaastav root) is **hardcoded to season `2024`** in the URL:
+```python
+get_data("https://understat.com/league/EPL/2024")
+```
+
+Understat provides match-level xG, xA, npxG, xGChain, xGBuildup — features identified in notebook 04 as the **biggest potential accuracy improvement** (commented-out code exists for these features). This is the most impactful data gap.
+
+### 4. No FBref Data for Any Recent Season
+
+The `fbref.py` scraper hardcodes output paths to `data/2021-22/fbref/`. No FBref data exists for 2022-23 onwards. FBref provides defensive stats (tackles, interceptions, pressures, progressive passes) that complement the FPL API's more limited stat set.
+
+Note: The FPL API added some defensive stats (`clearances_blocks_interceptions`, `defensive_contribution`, `recoveries`, `tackles`) starting in 2025-26, partially closing this gap.
+
+### 5. FPL API Remains Fully Available
+
+The official FPL API requires no authentication and has no documented rate limits:
+
+| Endpoint | Data Returned | Call Volume |
+|----------|---------------|-------------|
+| `/api/bootstrap-static/` | All players, teams, events, `ep_this`/`ep_next` | 1 call (~2MB) |
+| `/api/element-summary/{id}/` | Per-player GW history + past seasons | ~700 calls (one per player) |
+| `/api/fixtures/` | All fixtures with FDR ratings | 1 call |
+
+The existing `getters.py` (both in `src/data_collection/` and vaastav root) correctly targets these endpoints. The `global_scraper.py` in vaastav orchestrates the full collection pipeline and already handles xP extraction from `ep_this`.
+
+### 6. Schema Drift Across Seasons
+
+Columns change between and within seasons:
+
+| Season | Change |
+|--------|--------|
+| 2016-19 | Player names encoded as latin-1 (not UTF-8) |
+| 2024-25 | Added `mng_*` columns (manager points) mid-season |
+| 2025-26 | Added `clearances_blocks_interceptions`, `defensive_contribution`, `recoveries`, `tackles` |
+
+The vaastav `collector.py` has a `regenerate_merged_gw()` function that handles schema unification post-hoc, but the pipeline's feature engineering (notebook 02) assumes a fixed column set.
+
+### 7. What's Needed for Live Weekly Predictions
+
+To run the pipeline for next-GW predictions, these data sources must be fetched on a schedule:
+
+| Data | Source | When to Fetch | Status |
+|------|--------|---------------|--------|
+| Current player stats | FPL API bootstrap | Any time (updates after each GW) | **Available** |
+| GW-by-GW history | FPL API element-summary | After each GW finalizes | **Available** (slow: ~35 min) |
+| xP (expected points) | FPL API bootstrap `ep_this` | **Before GW deadline** | **Available** (timing-critical) |
+| Fixture difficulty | FPL API fixtures | Any time | **Available** |
+| xG/xA (Understat) | understat.com scraping | After each match | **Broken** (hardcoded season) |
+| Defensive stats (FBref) | fbref.com scraping | After each match | **Broken** (hardcoded paths) |
+
+The pipeline currently works for **backtesting** on historical data but has no automated path for **live weekly predictions**. The critical missing piece is a data collection layer that:
+1. Runs on a schedule (before each GW deadline for xP, after each GW for results)
+2. Updates the Understat scraper to target the current season
+3. Handles the FPL API's ~35-minute full-player fetch with resume capability
+4. Produces the `cleaned_merged_seasons1.csv` format that notebook 02 expects

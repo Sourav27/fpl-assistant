@@ -1,0 +1,47 @@
+# Original files archive
+_original/
+
+# Trained models
+models/*.sav
+
+# Large generated datasets
+data/Fantasy-Premier-League/
+data/raw/
+*.csv.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# R
+.RData
+.Rhistory
+.Rproj.user/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log

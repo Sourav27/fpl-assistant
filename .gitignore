@@ -7,6 +7,8 @@ models/*.sav
 # Large generated datasets
 data/Fantasy-Premier-League/
 data/raw/
+data/all_players_timeseries_dataset.csv
+data/merged_gw*.csv
 *.csv.gz
 
 # Python

@@ -1,38 +1,34 @@
-"","gw","total_xP","actual_points","player1","player2","player3","player4","player5","player6","player7","player8","player9","player10","player11","mae","total_players"
-"1",1,50.4,54,"Trent Alexander-Arnold","Andrew Robertson","Erling Haaland","Ederson Santana de Moraes","Virgil van Dijk","João Cancelo","Ben Chilwell","Kai Havertz","Gabriel Martinelli Silva","Christian Pulisic","Bruno Guimarães Rodriguez Moura",1.44869109947644,573
-"2",0,0,0,"","","","","","","","","","","",0,0
-"3",0,0,0,"","","","","","","","","","","",0,0
-"4",0,0,0,"","","","","","","","","","","",0,0
-"5",0,0,0,"","","","","","","","","","","",0,0
-"6",0,0,0,"","","","","","","","","","","",0,0
-"7",0,0,0,"","","","","","","","","","","",0,0
-"8",0,0,0,"","","","","","","","","","","",0,0
-"9",0,0,0,"","","","","","","","","","","",0,0
-"10",0,0,0,"","","","","","","","","","","",0,0
-"11",0,0,0,"","","","","","","","","","","",0,0
-"12",0,0,0,"","","","","","","","","","","",0,0
-"13",0,0,0,"","","","","","","","","","","",0,0
-"14",0,0,0,"","","","","","","","","","","",0,0
-"15",0,0,0,"","","","","","","","","","","",0,0
-"16",0,0,0,"","","","","","","","","","","",0,0
-"17",0,0,0,"","","","","","","","","","","",0,0
-"18",0,0,0,"","","","","","","","","","","",0,0
-"19",0,0,0,"","","","","","","","","","","",0,0
-"20",0,0,0,"","","","","","","","","","","",0,0
-"21",0,0,0,"","","","","","","","","","","",0,0
-"22",0,0,0,"","","","","","","","","","","",0,0
-"23",0,0,0,"","","","","","","","","","","",0,0
-"24",0,0,0,"","","","","","","","","","","",0,0
-"25",0,0,0,"","","","","","","","","","","",0,0
-"26",0,0,0,"","","","","","","","","","","",0,0
-"27",0,0,0,"","","","","","","","","","","",0,0
-"28",0,0,0,"","","","","","","","","","","",0,0
-"29",0,0,0,"","","","","","","","","","","",0,0
-"30",0,0,0,"","","","","","","","","","","",0,0
-"31",0,0,0,"","","","","","","","","","","",0,0
-"32",0,0,0,"","","","","","","","","","","",0,0
-"33",0,0,0,"","","","","","","","","","","",0,0
-"34",0,0,0,"","","","","","","","","","","",0,0
-"35",0,0,0,"","","","","","","","","","","",0,0
-"36",0,0,0,"","","","","","","","","","","",0,0
-"37",0,0,0,"","","","","","","","","","","",0,0
+"gw","total_xP","actual_points","captain","squad_value","player1","player2","player3","player4","player5","player6","player7","player8","player9","player10","player11"
+5,95.2,88,"Erling Haaland",998,"Erling Haaland","Pascal GroÃ","Harry Kane","Gabriel Martinelli Silva","Aleksandar MitroviÄ","Martin Ãdegaard","Luis DÃ­az","JoÃ£o Cancelo","JosÃ© Malheiro de SÃ¡","William Saliba","Kyle Walker"
+6,94,108,"Erling Haaland",996,"Erling Haaland","Harry Kane","Ivan Toney","Alexis Mac Allister","Marcus Rashford","Luis DÃ­az","Bernardo Veiga de Carvalho e Silva","JosÃ© Malheiro de SÃ¡","Virgil van Dijk","Nathan Collins","Max Kilman"
+8,90.3,74,"Erling Haaland",958,"Erling Haaland","Harry Kane","Bukayo Saka","Aleksandar MitroviÄ","Bernardo Veiga de Carvalho e Silva","Pierre-Emile HÃ¸jbjerg","William Saliba","John Stones","Nick Pope","Anthony Gordon","Conor Coady"
+9,129.5,167,"Erling Haaland",999,"Erling Haaland","Leandro Trossard","Phil Foden","Roberto Firmino","Illan Meslier","James Maddison","Harry Kane","Jarrod Bowen","Tyrone Mings","Conor Coady","Thiago Emiliano da Silva"
+10,114.8,79,"Erling Haaland",997,"Erling Haaland","Phil Foden","Leandro Trossard","James Maddison","Harry Kane","JoÃ£o Cancelo","Miguel AlmirÃ³n Rejala","Roberto Firmino","Ashley Young","Illan Meslier","Tyrone Mings"
+11,96.8,62,"Erling Haaland",1000,"Erling Haaland","Bukayo Saka","Harry Kane","Mason Mount","Leandro Trossard","Phil Foden","Miguel AlmirÃ³n Rejala","Kepa Arrizabalaga","JoÃ£o Cancelo","Ashley Young","William Saliba"
+12,0,3,"Luka Milivojevic",617,"Luka Milivojevic","Sam Greenwood","Carlos Ribeiro Dias","Marvelous Nakamba","Nampalys Mendy","Carney Chukwuemeka","Cameron Archer","Daniel Iversen","Robert Kenedy Nunes do Nascimento","Leo Fuhr Hjelde","James Tomkins"
+13,97.4,89,"Erling Haaland",995,"Erling Haaland","Miguel AlmirÃ³n Rejala","Alisson Ramses Becker","Phil Foden","Harry Kane","Granit Xhaka","Timothy Castagne","Mason Mount","Alex Iwobi","JoÃ£o Cancelo","Kieran Trippier"
+14,86.3,81,"Miguel AlmirÃ³n Rejala",989,"Miguel AlmirÃ³n Rejala","Erling Haaland","Harry Kane","Bukayo Saka","Alisson Ramses Becker","Callum Wilson","Granit Xhaka","Thomas Partey","Kieran Trippier","JoÃ£o Cancelo","Timothy Castagne"
+15,83.9,100,"Kevin De Bruyne",1000,"Kevin De Bruyne","Miguel AlmirÃ³n Rejala","Mohamed Salah","Alisson Ramses Becker","Kieran Trippier","Gabriel dos Santos MagalhÃ£es","RÃºben da Silva Neves","Harry Kane","Timothy Castagne","Daniel Amartey","Romain Perraud"
+16,98.6,121,"Martin Ãdegaard",994,"Martin Ãdegaard","Mohamed Salah","Marcus Tavernier","Harry Kane","Kieran Trippier","Gabriel dos Santos MagalhÃ£es","Miguel AlmirÃ³n Rejala","Rodrigo Bentancur","Danny Ward","William Saliba","Darwin NÃºÃ±ez Ribeiro"
+17,133.7,137,"Marcus Rashford",991,"Marcus Rashford","Solly March","Tim Ream","Martin Ãdegaard","Joelinton CÃ¡ssio ApolinÃ¡rio de Lira","Kieran Trippier","Rodrigo Hernandez","Erling Haaland","Virgil van Dijk","Harry Kane","Robert SÃ¡nchez"
+18,105.9,98,"Martin Ãdegaard",990,"Martin Ãdegaard","Marcus Rashford","Gabriel Martinelli Silva","Kieran Trippier","Mohamed Salah","Douglas Luiz Soares de Paulo","Ivan Toney","Tim Ream","Erling Haaland","Luke Shaw","David De Gea Quintana"
+19,112.8,118,"Tim Ream",999,"Tim Ream","Willian Borges da Silva","Harry Kane","Bernd Leno","Martin Ãdegaard","Luke Shaw","Solly March","Marcus Rashford","Gabriel Martinelli Silva","Kai Havertz","Kieran Trippier"
+20,134.5,115,"Erling Haaland",994,"Erling Haaland","Harry Kane","Bruno Borges Fernandes","Marcus Rashford","Luke Shaw","Michael Olise","Rodrigo Hernandez","Solly March","Kieran Trippier","Ederson Santana de Moraes","Dan Burn"
+21,94.1,95,"Erling Haaland",999,"Erling Haaland","Martin Ãdegaard","Solly March","Kieran Trippier","Harry Kane","Riyad Mahrez","Bukayo Saka","Eddie Nketiah","Nick Pope","Dan Burn","Luke Shaw"
+22,115.9,111,"Bruno Borges Fernandes",919,"Bruno Borges Fernandes","Marcus Rashford","Kaoru Mitoma","Brennan Johnson","Wilfried Gnonto","Erling Haaland","Solly March","Ben Mee","Kepa Arrizabalaga","Pervis EstupiÃ±Ã¡n","Kieran Trippier"
+23,124.5,98,"Erling Haaland",947,"Erling Haaland","Bukayo Saka","Riyad Mahrez","Eddie Nketiah","Rodrigo Hernandez","Jarrod Bowen","Kaoru Mitoma","David Raya Martin","Pervis EstupiÃ±Ã¡n","Ben Mee","Tim Ream"
+24,91.6,106,"Marcus Rashford",998,"Marcus Rashford","Ollie Watkins","Bernd Leno","Bruno Borges Fernandes","James Tarkowski","Tim Ream","Bukayo Saka","Mohamed Salah","Bryan Mbeumo","Pervis EstupiÃ±Ã¡n","Issa Diop"
+25,121.3,110,"Bukayo Saka",999,"Bukayo Saka","Mohamed Salah","Alisson Ramses Becker","Trent Alexander-Arnold","Martin Ãdegaard","Oleksandr Zinchenko","Ollie Watkins","James Tarkowski","Seamus Coleman","RÃºben da Silva Neves","Alex Iwobi"
+26,87.6,102,"Mohamed Salah",975,"Mohamed Salah","Marcus Rashford","Bukayo Saka","Ivan Toney","Trent Alexander-Arnold","Alisson Ramses Becker","Ollie Watkins","Brennan Johnson","Kaoru Mitoma","Pervis EstupiÃ±Ã¡n","Oleksandr Zinchenko"
+27,123.3,98,"Ivan Toney",962,"Ivan Toney","Kaoru Mitoma","Alexis Mac Allister","Mathias Jensen","Christian NÃ¸rgaard","Mohamed Salah","JoÃ«l Veltman","Gavin Bazunu","Harry Kane","Jan Bednarek","Trent Alexander-Arnold"
+28,84.8,98,"Harry Kane",904,"Harry Kane","Bukayo Saka","Gabriel Martinelli Silva","Jack Harrison","Tyrone Mings","Ivan Toney","Emiliano MartÃ­nez Romero","Abdoulaye DoucourÃ©","Gabriel dos Santos MagalhÃ£es","Matty Cash","Mathias Jensen"
+29,148.1,146,"Ollie Watkins",845,"Ollie Watkins","Jack Harrison","Kaoru Mitoma","Ivan Toney","Alexander Isak","Emiliano MartÃ­nez Romero","Alexis Mac Allister","Joe Willock","Tyrone Mings","Kieran Trippier","Lisandro MartÃ­nez"
+30,97.7,101,"Jack Grealish",984,"Jack Grealish","Harry Kane","Gabriel Martinelli Silva","Ollie Watkins","Kevin De Bruyne","Emiliano MartÃ­nez Romero","Ilkay GÃ¼ndogan","Solly March","Tyrone Mings","Lisandro MartÃ­nez","Lewis Dunk"
+31,93.7,88,"Jack Grealish",962,"Jack Grealish","Ollie Watkins","Kevin De Bruyne","Gabriel Martinelli Silva","Harry Kane","Dominic Solanke","Michael Olise","Emiliano MartÃ­nez Romero","Marc GuÃ©hi","Max Kilman","Tyrone Mings"
+32,83.5,65,"Ollie Watkins",940,"Ollie Watkins","Gabriel Martinelli Silva","Diogo Teixeira da Silva","Martin Ãdegaard","Eberechi Eze","Harry Kane","Jarrod Bowen","Emiliano MartÃ­nez Romero","Kurt Zouma","Marc GuÃ©hi","Benjamin White"
+33,89.8,100,"Kevin De Bruyne",991,"Kevin De Bruyne","Ollie Watkins","Jack Grealish","Harry Kane","Eberechi Eze","Diogo Teixeira da Silva","Joelinton CÃ¡ssio ApolinÃ¡rio de Lira","Tyrone Mings","JosÃ© Malheiro de SÃ¡","Alexandre Moreno Lopera","NÃ©lson Cabral Semedo"
+34,141.1,131,"Erling Haaland",999,"Erling Haaland","Mohamed Salah","Jack Grealish","Trent Alexander-Arnold","Diogo Teixeira da Silva","David De Gea Quintana","Joelinton CÃ¡ssio ApolinÃ¡rio de Lira","Pascal GroÃ","Tomas Soucek","Lewis Dunk","John Stones"
+35,88.8,78,"Erling Haaland",998,"Erling Haaland","Dwight McNeil","Mohamed Salah","Morgan Gibbs-White","Harry Kane","Martin Ãdegaard","Eberechi Eze","Trent Alexander-Arnold","Tyrone Mings","Diogo Dalot Teixeira","Jordan Pickford"
+36,0,4,"Sam Greenwood",594,"Sam Greenwood","Hugo Bueno LÃ³pez","Cameron Archer","Josh Dasilva","Mohamed Elneny","Matt Turner","Phil Jones","Harry Arter","Japhet Tanganga","Josh Wilson-Esbrand","Rico Lewis"
+37,117.9,76,"Erling Haaland",997,"Erling Haaland","Riyad Mahrez","Ilkay GÃ¼ndogan","David De Gea Quintana","Harry Kane","Luke Shaw","Pervis EstupiÃ±Ã¡n","Eberechi Eze","Callum Wilson","Victor LindelÃ¶f","Pascal GroÃ"
+38,86.7,87,"Harry Kane",983,"Harry Kane","Mohamed Salah","Taiwo Awoniyi","Eberechi Eze","Dwight McNeil","Abdoulaye DoucourÃ©","Martin Ãdegaard","Trent Alexander-Arnold","Aaron Ramsdale","Virgil van Dijk","Jakub Kiwior"

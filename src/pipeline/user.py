@@ -56,9 +56,8 @@ def _compute_free_transfers(gw_history: list[dict], current_gw: int) -> int:
         if transfers_used == 0:
             ft = min(ft + 1, 5)  # bank 1, cap at 5
         else:
-            # After using transfers, next GW = max(1, ft - transfers_used) + 1 banked
-            ft = max(1, ft - transfers_used) + 1
-            ft = min(ft, 5)
+            # Using any transfers resets FTs to 1 for the next GW
+            ft = 1
     return max(ft, 1)
 
 
@@ -77,7 +76,9 @@ def fetch_user_team_state(
 
     # 1. Entry info (bank balance)
     entry_data = _api_get_with_retry(f"{FPL_ENTRY_URL}/{entry_id}/").json()
-    bank = entry_data.get("last_deadline_bank") or entry_data.get("bank", 0)
+    bank = entry_data.get("last_deadline_bank")
+    if bank is None:
+        bank = entry_data.get("bank", 0)
 
     # 2. Current picks
     picks_data = _api_get_with_retry(
@@ -94,9 +95,11 @@ def fetch_user_team_state(
         f"{FPL_ENTRY_URL}/{entry_id}/transfers/"
     ).json()
     # Build purchase price map from transfer history: element → most recent buy price
+    # FPL returns transfers in reverse-chronological order (newest first)
     purchase_prices: dict[int, int] = {}
     for t in (transfers_data if isinstance(transfers_data, list) else []):
-        purchase_prices[t["element_in"]] = t["element_in_cost"]
+        if t["element_in"] not in purchase_prices:  # keep first (most recent) occurrence
+            purchase_prices[t["element_in"]] = t["element_in_cost"]
 
     # Compute selling prices
     cost_map = {e["id"]: e["now_cost"] for e in bootstrap_data.get("elements", [])}
@@ -166,7 +169,7 @@ def fetch_gw_benchmarks(
                 # Score at rank position within the page
                 position_in_page = (rank - 1) % 50
                 if position_in_page < len(results):
-                    benchmarks[key] = results[position_in_page].get("total") or results[position_in_page].get("event_total")
+                    benchmarks[key] = results[position_in_page].get("event_total") or results[position_in_page].get("total")
         except Exception as e:
             logger.warning(f"Could not fetch standings page for rank {rank}: {e}")
 

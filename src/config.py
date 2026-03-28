@@ -72,7 +72,7 @@ def load_user_config(path: Path | None = None) -> dict:
 
     # Validate horizon_gws
     horizon = prefs["horizon_gws"]
-    if not isinstance(horizon, int) or not (1 <= horizon <= 5):
+    if isinstance(horizon, bool) or not isinstance(horizon, int) or not (1 <= horizon <= 5):
         raise UserConfigError(
             f"user_config.yaml: horizon_gws must be an integer 1-5, got {horizon!r}"
         )

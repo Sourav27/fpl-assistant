@@ -73,11 +73,11 @@ class UserTeamState:
     entry_id: int
     current_squad: list[int]       # 15 element IDs (seasonal)
     squad_codes: list[int]         # 15 persistent player codes (for joining with predictions)
-    selling_prices: dict[int, int] # element → selling price (0.1M units)
-    bank: int                      # remaining budget (0.1M units)
+    selling_prices: dict[int, int] # element → selling price (£)
+    bank: int                      # remaining budget (£)
     free_transfers: int            # banked free transfers (1-5)
     active_chip: str | None        # "wildcard", "freehit", "bboost", "3xc", or None
-    total_value: int               # sum of selling prices + bank
+    total_value: int               # sum of selling prices + bank (£)
 ```
 
 **Element ID vs code:** The FPL API returns `element` IDs (seasonal). The existing

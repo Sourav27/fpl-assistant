@@ -124,7 +124,7 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 
 ## FPL Constraints (optimizer)
 
-- Budget: £100M (1000 in 0.1M units)
+- Budget: £100M
 - Squad: 2 GK + 5 DEF + 5 MID + 3 FWD (15 players)
 - XI: 1 GK, 3–5 DEF, 2–5 MID, 1–3 FWD (11 players)
 - Max 3 players from any single club

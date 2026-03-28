@@ -73,12 +73,15 @@ class UserTeamState:
     entry_id: int
     current_squad: list[int]       # 15 element IDs (seasonal)
     squad_codes: list[int]         # 15 persistent player codes (for joining with predictions)
-    selling_prices: dict[int, int] # element → selling price (£)
-    bank: int                      # remaining budget (£)
+    selling_prices: dict[int, int] # element → selling price (0.1M units, e.g., 77 = £7.7m)
+    bank: int                      # remaining budget (0.1M units, e.g., 350 = £35.0m)
     free_transfers: int            # banked free transfers (1-5)
     active_chip: str | None        # "wildcard", "freehit", "bboost", "3xc", or None
-    total_value: int               # sum of selling prices + bank (£)
+    total_value: int               # sum of selling prices + bank (0.1M units)
 ```
+
+**Units note:** All cost values are stored in **0.1M unit increments** (same as FPL API: 10 = £1m, 77 = £7.7m).
+For user-facing output (CSVs, logs, UI), divide by 10 and format as £ currency (e.g., 77 → £7.7m).
 
 **Element ID vs code:** The FPL API returns `element` IDs (seasonal). The existing
 pipeline uses persistent `code` as the cross-season identifier. `user.py` must map
@@ -90,10 +93,14 @@ in the UI).
 **Selling price computation:** The FPL picks endpoint (`/api/entry/{id}/event/{gw}/picks/`)
 may include a `selling_price` field per pick, but this is not reliably available for
 public (non-authenticated) access. **Primary path:** compute selling price from
-transfer history: `purchase_price + floor((current_price - purchase_price) / 2)`.
+transfer history using 0.1M units:
+```
+selling_price = purchase_price + floor((current_price - purchase_price) / 2)
+```
+Example: purchase 75 (£7.5m), current 78 (£7.8m) → selling 76 (£7.6m).
 The transfer history endpoint (`/api/entry/{id}/transfers/`) provides `element_in_cost`
-for each transfer, giving the purchase price. For players in the initial squad (no
-transfer record), use the player's starting season price from bootstrap.
+for each transfer, giving the purchase price in 0.1M units. For players in the initial
+squad (no transfer record), use the player's starting season price from bootstrap.
 
 **Config validation:** `load_user_config()` validates required keys (`teams.default.entry_id`),
 types (entry_id must be int, horizon_gws 1-5), and prints specific errors for missing
@@ -147,14 +154,16 @@ rating for future GWs.
 
 **Budget constraint (asymmetric buy/sell):**
 The budget must account for the selling price haircut. Players are sold at their
-selling price (purchase + 50% profit rounded down), but bought at current market price:
+selling price (purchase + 50% profit rounded down), but bought at current market price.
+All values in 0.1M units (same as FPL API: budget 1000 = £100M):
 ```
 bank[gw] = bank[gw-1]
-  + sum(selling_price[p] * transfer_out[p][gw])   # revenue from sales
-  - sum(current_price[p] * transfer_in[p][gw])     # cost of purchases
+  + sum(selling_price[p] * transfer_out[p][gw])   # revenue from sales (0.1M units)
+  - sum(now_cost[p] * transfer_in[p][gw])          # cost of purchases (0.1M units)
 bank[gw] >= 0                                       # cannot go negative
 ```
-Where `bank[0] = team_state.bank` and selling prices come from `UserTeamState`.
+Where `bank[0] = team_state.bank` and selling prices come from `UserTeamState` (computed in 0.1M units).
+For user-facing display, convert: `bank_pounds = bank / 10` (e.g., 350 → £35.0m).
 For newly acquired players (bought in GW k, sold in GW k+n), selling price equals
 purchase price (no profit yet) — a simplification acceptable for a 5-GW horizon.
 
@@ -198,20 +207,23 @@ GW 1 (current) uses raw xP with no FDR discount.
 **Player pool pre-filtering (solve time):**
 A 5-GW horizon with 500+ players creates a large ILP. Pre-filter to top N players
 per position by average xP across the horizon (e.g., top 30 DEF, top 20 MID, top 15 FWD,
-top 10 GK) plus all players currently in the user's squad. Target solve time: < 60 seconds
+top 10 GK) plus all players currently in the user's squad. All `now_cost` values from
+predictions CSV are already in 0.1M units (from FPL API). Target solve time: < 60 seconds
 on a consumer laptop. If solve time exceeds this, reduce N or horizon.
 
-**Output:**
+**Output (user-facing, all prices in £):**
 ```
-GW33: Transfer OUT Watkins (5.2 xP) → IN Haaland (7.8 xP)  [1 free transfer]
+GW33: Transfer OUT Watkins (5.2 xP, £5.2m) → IN Haaland (7.8 xP, £7.8m)  [1 free transfer]
 GW34: Hold
-GW35: Transfer OUT Saka (6.1 xP) → IN Palmer (7.0 xP)  [1 free transfer]
+GW35: Transfer OUT Saka (6.1 xP, £6.1m) → IN Palmer (7.0 xP, £7.0m)  [1 free transfer]
 Projected total xP (5 GWs): 312.4
 Transfer cost: 0 points (all free transfers)
+Bank after transfers: £35.2m
 ```
 
 Saved to `results/recommend_gw{N}.csv` with columns:
-`gw, action, player_out, player_in, xP_out, xP_in, transfer_cost, squad_after`
+`gw, action, player_out, player_in, price_out, price_in, xp_out, xp_in, transfer_cost, bank_after`
+(All prices in £ format for user readability, e.g., 5.2 for £5.2m)
 
 #### Wildcard Mode (`--wildcard` flag)
 

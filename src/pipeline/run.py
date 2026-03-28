@@ -30,6 +30,10 @@ from src.pipeline.fetch import (
 from src.pipeline.user import fetch_user_team_state
 from src.pipeline.recommend import recommend_transfers, recommend_wildcard, save_recommend_csv
 from src.pipeline.prepare import build_merged_dataset
+from src.pipeline.analysis import (
+    compute_prediction_misses, compute_dream_team,
+    format_post_match_summary, append_accuracy_log,
+)
 from src.pipeline.features import engineer_features
 from src.pipeline.predict import predict_next_gw, get_feature_columns, save_full_predictions
 from src.pipeline.availability import filter_availability
@@ -265,6 +269,118 @@ def phase_post_gw():
         print("[post-gw] No player data collected (GW may not be finished)")
 
     print("[post-gw] Done. Run 'predict' to update features with new data.")
+
+    # P2a: post-match analysis (skipped gracefully if user config missing)
+    try:
+        cfg = load_user_config()
+    except UserConfigError:
+        print("[post-gw] user_config.yaml not found — skipping post-match analysis")
+        return
+
+    entry_id = cfg["teams"]["default"]["entry_id"]
+
+    # Load predictions for this GW
+    gw_label = f"gw{gw}"
+    pred_path = RESULTS_DIR / f"predictions_{gw_label}.csv"
+    if not pred_path.exists():
+        print(f"[post-gw] Predictions file {pred_path} not found — skipping analysis")
+        return
+
+    predictions = pd.read_csv(pred_path)
+
+    # Fetch user picks for this GW
+    try:
+        user_state = fetch_user_team_state(entry_id, gw, bootstrap)
+        picks_elements = set(user_state.current_squad)
+        your_picks = predictions[predictions["element"].isin(picks_elements)].copy()
+    except Exception as e:
+        logger.warning(f"Could not fetch user picks: {e}")
+        your_picks = pd.DataFrame()
+
+    # Merge actual points
+    if not live_df.empty and not your_picks.empty:
+        actual_map = live_df.set_index("element")["total_points"].to_dict()
+        your_picks["actual_points"] = your_picks["element"].map(actual_map).fillna(0)
+        your_pts = int(your_picks["actual_points"].sum())
+        your_xp = float(your_picks["xP"].sum())
+        misses = compute_prediction_misses(your_picks)
+    else:
+        your_pts = 0
+        your_xp = 0.0
+        misses = []
+
+    # Recommended team comparison
+    rec_path = RESULTS_DIR / f"recommend_{gw_label}.csv"
+    recommended_pts = None
+    recommended_xp = None
+    if rec_path.exists() and not live_df.empty:
+        rec_df = pd.read_csv(rec_path)
+        rec_elements = set(
+            predictions[predictions["name"].isin(rec_df["player_in"].dropna())]["element"]
+        )
+        if rec_elements:
+            rec_picks = live_df[live_df["element"].isin(rec_elements)]
+            recommended_pts = int(rec_picks["total_points"].sum())
+            rec_xp_df = predictions[predictions["element"].isin(rec_elements)]
+            recommended_xp = float(rec_xp_df["xP"].sum()) if not rec_xp_df.empty else None
+
+    # Dream team from live data
+    dream_pts = None
+    if not live_df.empty:
+        try:
+            dream = compute_dream_team(live_df)
+            dream_pts = int(dream["total_points"].sum() if "total_points" in dream.columns
+                            else dream["xP"].sum())
+        except Exception as e:
+            logger.warning(f"Dream team computation failed: {e}")
+
+    # Benchmarks
+    from src.pipeline.user import fetch_gw_benchmarks
+    overall_league_id = None
+    try:
+        entry_data = _api_get_with_retry(f"{FPL_ENTRY_URL}/{entry_id}/").json()
+        for league in entry_data.get("leagues", {}).get("classic", []):
+            if league.get("league_type") == "s" and league.get("scoring") == "c":
+                overall_league_id = league["id"]
+                break
+    except Exception:
+        pass
+
+    benchmarks = {}
+    your_percentile_rank = None
+    if overall_league_id:
+        try:
+            benchmarks = fetch_gw_benchmarks(gw, bootstrap, overall_league_id)
+        except Exception as e:
+            logger.warning(f"Could not fetch benchmarks: {e}")
+    # Percentile rank from history
+    try:
+        history = _api_get_with_retry(f"{FPL_ENTRY_URL}/{entry_id}/history/").json()
+        for row in history.get("current", []):
+            if row["event"] == gw:
+                your_percentile_rank = row.get("percentile_rank")
+                break
+    except Exception:
+        pass
+
+    # Print summary
+    print(format_post_match_summary(
+        gw=gw, your_pts=your_pts, your_xp=your_xp,
+        recommended_pts=recommended_pts, recommended_xp=recommended_xp,
+        dream_pts=dream_pts, benchmarks=benchmarks,
+        your_percentile_rank=your_percentile_rank, misses=misses,
+    ))
+
+    # Write accuracy log
+    log_path = RESULTS_DIR / "accuracy_log.csv"
+    append_accuracy_log(
+        path=log_path, gw=gw,
+        your_pts=your_pts, your_xp=your_xp,
+        recommended_pts=recommended_pts, recommended_xp=recommended_xp,
+        dream_pts=dream_pts, your_percentile_rank=your_percentile_rank,
+        benchmarks=benchmarks, ranked_count=benchmarks.get("ranked_count"),
+    )
+    print(f"[post-gw] Accuracy log updated: {log_path}")
 
 
 def _is_wildcard_mode(user_state, wildcard_flag: bool) -> bool:

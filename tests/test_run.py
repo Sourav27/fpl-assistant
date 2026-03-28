@@ -171,3 +171,25 @@ class TestRecommendPhase:
         )
         assert _is_wildcard_mode(state, wildcard_flag=True) is True
         assert _is_wildcard_mode(state, wildcard_flag=False) is False
+
+
+class TestPostGwAnalysis:
+    def test_post_gw_skips_analysis_when_no_config(self, tmp_path, monkeypatch):
+        """If user_config.yaml missing, post-gw still completes (analysis skipped)."""
+        import src.pipeline.run as run_mod
+        from unittest.mock import patch, MagicMock
+        monkeypatch.setattr(run_mod, "RESULTS_DIR", tmp_path)
+        # Mock API calls to return minimal data
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "events": [{"id": 30, "is_current": True, "is_next": False,
+                        "finished": True, "highest_score": 100,
+                        "average_entry_score": 40, "ranked_count": 10000000}],
+            "elements": [], "teams": [],
+        }
+        with patch("src.pipeline.run.fetch_bootstrap", return_value=mock_resp.json()), \
+             patch("src.pipeline.run.fetch_fixtures", return_value=[]), \
+             patch("src.pipeline.run.fetch_live_gw_data", return_value=pd.DataFrame()), \
+             patch("src.pipeline.run.load_user_config", side_effect=UserConfigError("missing")):
+            # Should not raise
+            run_mod.phase_post_gw()

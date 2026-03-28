@@ -402,3 +402,66 @@ def _recommend_multi_gw(
             if lp_value(squad[i][horizon - 1]) is not None and lp_value(squad[i][horizon - 1]) > 0.5
         ],
     }
+
+
+def recommend_wildcard(
+    user_state: "UserTeamState",
+    predictions: pd.DataFrame,
+) -> dict:
+    """Unconstrained squad selection using user's total squad value as budget.
+
+    Used for Wildcard and Free Hit chips.
+    predictions.now_cost is in 0.1M units. user_state.total_value is also in 0.1M units.
+    Both are consistent — pass total_value directly as budget override.
+    """
+    from src.pipeline.optimize import optimize_team
+    # total_value and now_cost are both in 0.1M units — pass directly
+    preds = predictions.copy()
+    result = optimize_team(preds, budget=int(user_state.total_value))
+    return {
+        "squad": result["squad"]["element"].tolist(),
+        "xi": result["xi"]["element"].tolist(),
+        "captain": result["captain"]["element"],
+        "total_xp": result["total_xp"],
+        "transfers": [],  # no specific transfers (full rebuild)
+    }
+
+
+def save_recommend_csv(plan: dict, path: "Path", start_gw: int) -> None:
+    """Save transfer plan to CSV.
+
+    Columns: gw, action, player_out, player_in, price_out, price_in,
+             xp_out, xp_in, hit_cost, bank_after
+    """
+    from pathlib import Path as _Path
+
+    rows = []
+    transfers_by_gw = plan.get("transfers", [])
+    for gw_offset, gw_transfers in enumerate(transfers_by_gw):
+        gw = start_gw + gw_offset
+        if not gw_transfers:
+            rows.append({
+                "gw": gw, "action": "hold", "player_out": "", "player_in": "",
+                "price_out": "", "price_in": "", "xp_out": "", "xp_in": "",
+                "hit_cost": gw_transfers.get("hit_cost", 0) if isinstance(gw_transfers, dict) else 0,
+                "bank_after": "",
+            })
+        else:
+            transfers_list = gw_transfers if isinstance(gw_transfers, list) else gw_transfers.get("transfers", [])
+            for t in transfers_list:
+                rows.append({
+                    "gw": gw,
+                    "action": "transfer",
+                    "player_out": t["player_out"],
+                    "player_in": t["player_in"],
+                    "price_out": t["price_out"],
+                    "price_in": t["price_in"],
+                    "xp_out": round(t["xp_out"], 1),
+                    "xp_in": round(t["xp_in"], 1),
+                    "hit_cost": t.get("hit_cost", 0),
+                    "bank_after": plan.get("bank_after", ""),
+                })
+
+    path = _Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_csv(path, index=False)

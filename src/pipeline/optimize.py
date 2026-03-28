@@ -6,8 +6,9 @@ from pulp import LpMaximize, LpProblem, LpVariable, lpSum, value
 from src.config import SQUAD_RULES
 
 
-def select_squad(players: pd.DataFrame) -> pd.DataFrame:
+def select_squad(players: pd.DataFrame, budget: int | None = None) -> pd.DataFrame:
     """Select optimal 15-player squad using linear programming."""
+    budget = budget if budget is not None else SQUAD_RULES["budget"]
     prob = LpProblem("FPL_Squad", LpMaximize)
     n = len(players)
     x = [LpVariable(f"x_{i}", cat="Binary") for i in range(n)]
@@ -19,7 +20,7 @@ def select_squad(players: pd.DataFrame) -> pd.DataFrame:
     prob += lpSum(x) == SQUAD_RULES["squad_size"]
 
     # Budget constraint
-    prob += lpSum(x[i] * players.iloc[i]["now_cost"] for i in range(n)) <= SQUAD_RULES["budget"]
+    prob += lpSum(x[i] * players.iloc[i]["now_cost"] for i in range(n)) <= budget
 
     # Position constraints
     for pos, count in SQUAD_RULES["positions"].items():
@@ -77,9 +78,9 @@ def select_captain(xi: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     return sorted_xi.iloc[0], sorted_xi.iloc[1]
 
 
-def optimize_team(players: pd.DataFrame) -> dict:
+def optimize_team(players: pd.DataFrame, budget: int | None = None) -> dict:
     """Full optimization pipeline: squad -> XI -> captain."""
-    squad = select_squad(players)
+    squad = select_squad(players, budget=budget)
     xi = select_xi(squad)
     captain, vice = select_captain(xi)
 

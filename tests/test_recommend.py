@@ -213,3 +213,49 @@ class TestRecommendMultiGW:
         for gw_transfers in plan["transfers"]:
             hit = gw_transfers.get("hit_cost", 0)
             assert hit <= 4
+
+
+class TestRecommendWildcard:
+    def test_wildcard_ignores_current_squad(self, sample_user_state, extended_predictions_df):
+        from src.pipeline.recommend import recommend_wildcard
+        plan = recommend_wildcard(
+            user_state=sample_user_state,
+            predictions=extended_predictions_df,
+        )
+        assert "squad" in plan
+        assert len(plan["squad"]) == 15
+        assert "total_xp" in plan
+
+    def test_wildcard_uses_total_value_as_budget(self, sample_user_state, extended_predictions_df):
+        from src.pipeline.recommend import recommend_wildcard
+        plan = recommend_wildcard(sample_user_state, extended_predictions_df)
+        # Budget used (in 0.1M units) must be <= total_value (0.1M units)
+        total_cost_01m = sum(
+            extended_predictions_df[extended_predictions_df["element"] == e]["now_cost"].values[0]
+            for e in plan["squad"]
+            if e in extended_predictions_df["element"].values
+        )
+        assert total_cost_01m <= sample_user_state.total_value + 1  # 1 unit tolerance for rounding
+
+
+class TestSaveRecommendCSV:
+    def test_creates_csv_with_correct_columns(self, tmp_path):
+        from src.pipeline.recommend import save_recommend_csv
+        plan = {
+            "transfers": [
+                [{"player_out": "Watkins", "player_in": "Haaland",
+                  "price_out": 5.2, "price_in": 7.8, "xp_out": 5.2, "xp_in": 7.8}],
+                [],
+            ],
+            "projected_xp": 312.4,
+            "hit_cost": 0,
+            "bank_after": 3.5,
+        }
+        out_path = tmp_path / "recommend_gw33.csv"
+        save_recommend_csv(plan, out_path, start_gw=33)
+        import pandas as pd
+        df = pd.read_csv(out_path)
+        assert "gw" in df.columns
+        assert "player_out" in df.columns
+        assert "player_in" in df.columns
+        assert "hit_cost" in df.columns

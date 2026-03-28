@@ -48,6 +48,7 @@ teams:
 preferences:
   horizon_gws: 5           # GWs to plan ahead (1 = single-GW, max 5)
   max_hit_points: 8         # won't recommend more than -8 hits in a single GW
+  fdr_sensitivity: 0.15     # how much fixture difficulty affects xP (0 = ignore, 0.3 = aggressive)
 ```
 
 **Loading:** New `load_user_config()` function reads the YAML. If file is missing,
@@ -70,7 +71,8 @@ Returns a dataclass:
 @dataclass
 class UserTeamState:
     entry_id: int
-    current_squad: list[int]       # 15 element IDs
+    current_squad: list[int]       # 15 element IDs (seasonal)
+    squad_codes: list[int]         # 15 persistent player codes (for joining with predictions)
     selling_prices: dict[int, int] # element → selling price (0.1M units)
     bank: int                      # remaining budget (0.1M units)
     free_transfers: int            # banked free transfers (1-5)
@@ -78,9 +80,24 @@ class UserTeamState:
     total_value: int               # sum of selling prices + bank
 ```
 
-**Selling price computation:** FPL API provides `selling_price` directly in the picks
-endpoint for the user's players. If unavailable, compute as:
-`purchase_price + floor((current_price - purchase_price) / 2)` rounded to nearest 0.1M.
+**Element ID vs code:** The FPL API returns `element` IDs (seasonal). The existing
+pipeline uses persistent `code` as the cross-season identifier. `user.py` must map
+element IDs to codes via the bootstrap lookup (`bootstrap["elements"]` contains both
+`id` and `code` per player). The `recommend.py` module joins on `code` internally
+but outputs `element` IDs for the user-facing transfer plan (since FPL uses element IDs
+in the UI).
+
+**Selling price computation:** The FPL picks endpoint (`/api/entry/{id}/event/{gw}/picks/`)
+may include a `selling_price` field per pick, but this is not reliably available for
+public (non-authenticated) access. **Primary path:** compute selling price from
+transfer history: `purchase_price + floor((current_price - purchase_price) / 2)`.
+The transfer history endpoint (`/api/entry/{id}/transfers/`) provides `element_in_cost`
+for each transfer, giving the purchase price. For players in the initial squad (no
+transfer record), use the player's starting season price from bootstrap.
+
+**Config validation:** `load_user_config()` validates required keys (`teams.default.entry_id`),
+types (entry_id must be int, horizon_gws 1-5), and prints specific errors for missing
+or malformed fields. Uses simple dict checks — no extra dependencies.
 
 ### New Module: `src/pipeline/recommend.py`
 
@@ -97,10 +114,24 @@ Multi-GW ILP formulation using PuLP:
 - `transfer_out[player][gw]` ∈ {0, 1}
 - `captain[player][gw]` ∈ {0, 1}
 
+**Additional decision variables:**
+- `hits[gw]` ≥ 0 (integer) — extra transfers beyond free allowance
+- `ft[gw]` ∈ {1..5} (integer) — banked free transfers entering this GW
+- `used_ft[gw]` ∈ {0, 1} — whether any transfers were made this GW
+
 **Objective:** Maximise:
 ```
-sum over gw: sum over players: xP[player][gw] * fdr_weight[gw] * (1 + captain[player][gw])
-  - 4 * max(0, transfers_used[gw] - free_transfers[gw])
+sum over gw:
+  sum over players: xP[player][gw] * fdr_weight[player][gw] * (1 + captain[player][gw])
+  - 4 * hits[gw]
+```
+
+**Linearisation of transfer cost:** PuLP requires linear expressions. The `max(0, ...)`
+is replaced by the auxiliary variable `hits[gw]` with constraints:
+```
+hits[gw] >= transfers_used[gw] - ft[gw]      (hits absorb excess)
+hits[gw] >= 0                                 (no negative hits)
+hits[gw] <= max_hit_points / 4                (user preference cap)
 ```
 
 Where `xP[player][gw]` uses the current prediction adjusted by fixture difficulty
@@ -110,16 +141,62 @@ rating for future GWs.
 - Squad validity: 2 GK, 5 DEF, 5 MID, 3 FWD
 - XI validity: 1 GK, ≥3 DEF, ≥2 MID, ≥1 FWD, total = 11
 - Max 3 per club
-- Budget: sum(cost of squad) ≤ total_value at each GW
 - Transfer continuity: `squad[gw] = squad[gw-1] + transfers_in[gw] - transfers_out[gw]`
-- Free transfer tracking: carries forward unused (max 5), resets to 1 after use
-- `max_hit_points` cap per GW
+- `transfers_used[gw] = sum(transfer_in[player][gw])` for all players
+- `max_hit_points` cap per GW: `hits[gw] * 4 <= max_hit_points`
+
+**Budget constraint (asymmetric buy/sell):**
+The budget must account for the selling price haircut. Players are sold at their
+selling price (purchase + 50% profit rounded down), but bought at current market price:
+```
+bank[gw] = bank[gw-1]
+  + sum(selling_price[p] * transfer_out[p][gw])   # revenue from sales
+  - sum(current_price[p] * transfer_in[p][gw])     # cost of purchases
+bank[gw] >= 0                                       # cannot go negative
+```
+Where `bank[0] = team_state.bank` and selling prices come from `UserTeamState`.
+For newly acquired players (bought in GW k, sold in GW k+n), selling price equals
+purchase price (no profit yet) — a simplification acceptable for a 5-GW horizon.
+
+**Free transfer tracking (linearised with big-M):**
+Free transfers carry forward when unused, capped at 5. This is conditional logic
+that requires linearisation:
+```
+used_ft[gw] ∈ {0, 1}
+transfers_used[gw] <= M * used_ft[gw]               (if transfers=0 then used_ft=0)
+transfers_used[gw] >= used_ft[gw]                    (if transfers>0 then used_ft=1)
+ft[gw+1] >= ft[gw] + 1 - M * used_ft[gw]            (carry forward if unused)
+ft[gw+1] <= ft[gw] + 1 + M * used_ft[gw]            (carry forward if unused)
+ft[gw+1] >= 1                                        (minimum 1 after using transfers)
+ft[gw+1] <= 1 + M * (1 - used_ft[gw])               (reset to 1 if used)
+ft[gw] <= 5                                          (hard cap)
+ft[0] = team_state.free_transfers                    (initial state from API)
+```
+Where `M = 20` (maximum transfers per GW per FPL rules).
+
+**Blank and Double Gameweeks:**
+Players with no fixture in a future GW (blank GW) get `xP = 0` for that week.
+Players with two fixtures (double GW) get `xP` summed across both fixtures.
+Fixture data from the FPL API fixtures endpoint determines BGW/DGW status per team.
 
 **FDR weighting for future GWs:**
 Use fixture difficulty ratings from the FPL API fixtures endpoint. For each player,
-look up their team's opponent difficulty in each future GW. Apply a simple inverse
-scaling: `fdr_weight = (6 - fdr) / 4` so FDR 2 (easy) → 1.0, FDR 5 (hard) → 0.25.
-GW 1 (current) uses raw xP with no discount.
+look up their team's opponent difficulty in each future GW. Apply a configurable
+scaling function. Default: `fdr_weight = 1.0 - fdr_sensitivity * (fdr - 3) / 2`
+with `fdr_sensitivity = 0.15` (configurable in `user_config.yaml`), giving:
+- FDR 2 (easy) → 1.075
+- FDR 3 (average) → 1.0
+- FDR 4 (hard) → 0.925
+- FDR 5 (very hard) → 0.85
+
+This avoids the extreme 0.25 multiplier that would cause overfit to fixture difficulty.
+GW 1 (current) uses raw xP with no FDR discount.
+
+**Player pool pre-filtering (solve time):**
+A 5-GW horizon with 500+ players creates a large ILP. Pre-filter to top N players
+per position by average xP across the horizon (e.g., top 30 DEF, top 20 MID, top 15 FWD,
+top 10 GK) plus all players currently in the user's squad. Target solve time: < 60 seconds
+on a consumer laptop. If solve time exceeds this, reduce N or horizon.
 
 **Output:**
 ```
@@ -162,13 +239,21 @@ python -m src.pipeline.run recommend --gw 33 --wildcard
 python -m src.pipeline.run recommend --gw 33 --team alt
 ```
 
-**Prerequisite:** `predict` must have been run first for the target GW (reads from
-`results/xi_gw{N}.csv` or equivalent predictions output). The `recommend` phase does
-NOT re-run predictions.
+**Prerequisite:** `predict` must have been run first for the target GW. The `predict`
+phase must be updated to also save the full player predictions (not just the optimized XI)
+to `results/predictions_gw{N}.csv` — all players with columns: `element, code, name,
+position, team, xP, now_cost`. The `recommend` phase reads this file and does NOT re-run
+predictions.
 
 ### Chip Strategy
 
-Deferred to future work. The current design only handles wildcard auto-detection.
+Deferred to future work. The current design handles:
+- **Wildcard/Free Hit:** auto-detected from API → switches to unconstrained mode
+- **Bench Boost / Triple Captain:** if detected as active, log a warning
+  ("bench boost active — recommend phase does not yet optimize bench selection")
+  and proceed with normal optimization. Future extension will optimize bench for BB
+  and identify TC targets.
+
 Future extension: recommend optimal chip timing (bench boost on DGW, triple captain
 on high-xP fixture, free hit during blank GW).
 
@@ -197,7 +282,10 @@ Extend `phase_post_gw()` to run a three-way comparison after collecting live dat
    - Shows "value left on the table"
 
 3. **GW dream team vs recommended**
-   - Fetch dream team from FPL API (`/api/dream-team/{gw}/` or from bootstrap event data)
+   - Derive dream team from `/api/event/{gw}/live/` endpoint (highest-scoring XI by
+     position rules) or from bootstrap `events[gw].top_element_info` if available.
+     There is no dedicated `/api/dream-team/` endpoint — the dream team must be
+     computed from live player scores.
    - Compare recommended XI vs dream team — how close to the ceiling?
 
 ### Output
@@ -229,7 +317,7 @@ gw, your_pts, your_predicted_xp, recommended_pts, recommended_xp, dream_team_pts
 - User team picks: fetched via `user.py` (P1 must be implemented first)
 - Recommended team: loaded from `results/recommend_gw{N}.csv` (optional — skip comparison if missing)
 - Dream team: fetched from FPL API
-- Predictions: loaded from existing `results/xi_gw{N}.csv`
+- Predictions: loaded from `results/predictions_gw{N}.csv` (full player predictions)
 - Actual points: from live GW data (already collected by `phase_post_gw()`)
 
 ### CLI
@@ -320,8 +408,11 @@ global model. Only adopt if measurably better.
 
 ### Dependency
 
-Requires P4 (Understat features) to be meaningful — without xG/xA, the
-position-specific feature sets won't be different enough from the global set.
+Recommended after P4 (Understat features) for best results — xG/xA make the
+position-specific feature sets more distinct. However, a first-pass comparison can
+use existing features (`clean_sheets_roll_4`, `creativity_roll_4`, `threat_roll_4`)
+that are already in the pipeline. If P4 is delayed due to web-scraping risk, P3 can
+proceed with current features as a proof-of-concept.
 
 ---
 
@@ -365,14 +456,15 @@ Benchmark alternative fallback strategies and pick the best one by MAE.
 ```
 Track A (user-facing):              Track B (model quality):
   P1: User Team Sync + Recommend      P4: Understat Revival + Features
-      ↓                                    ↓
+      ↓                                  ↓ (recommended, not strict)
   P2a: Post-Match Analysis             P3: Positional Models
                                            ↓
                                        P5: Fallback Benchmarking
 ```
 
-Tracks are independent. Within each track, order is sequential (each item depends
-on the previous).
+Tracks are independent. Within Track A, P2a depends on P1 (needs user.py).
+Within Track B, P3 benefits from P4 but can start with existing features as a
+proof-of-concept if P4 is delayed. P5 is independent of P3/P4.
 
 ### Suggested Model Assignment for Subagents
 
@@ -400,6 +492,7 @@ New files:
   src/pipeline/user.py          # FPL API user data fetcher
   src/pipeline/recommend.py     # transfer-aware multi-GW optimizer
   src/pipeline/understat.py     # revived Understat scraper (P4)
+  results/predictions_gw{N}.csv  # full player predictions (all players, xP + cost)
   results/recommend_gw{N}.csv   # transfer plan output
   results/accuracy_log.csv      # season-long prediction accuracy
 

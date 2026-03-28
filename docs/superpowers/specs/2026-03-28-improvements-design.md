@@ -336,9 +336,17 @@ Extend `phase_post_gw()` to run a three-way comparison after collecting live dat
 ```
 === GW33 Post-Match Analysis ===
 
-Your Team:  58 pts (predicted: 72.3 xP)
-Recommended: 65 pts (predicted: 78.1 xP)
-Dream Team:  89 pts
+Your Team:    58 pts  (predicted: 72.3 xP)  | Percentile rank: 20th
+Recommended:  65 pts  (predicted: 78.1 xP)
+Dream Team:   89 pts
+
+Benchmark scores this GW:
+  Best score:    109 pts  (rank 1)
+  Top 1k:         85 pts
+  Top 10k:        79 pts
+  Top 100k:       73 pts
+  Top 1M:         62 pts
+  Average (50th): 38 pts
 
 Biggest prediction misses (your team):
   Haaland:  predicted 8.5 xP, actual 2 pts  (-6.5)
@@ -350,17 +358,47 @@ Dream team gap: -24 pts (recommended vs ceiling)
 
 **Season log:** Append one row per GW to `results/accuracy_log.csv`:
 ```csv
-gw, your_pts, your_predicted_xp, recommended_pts, recommended_xp, dream_team_pts, timestamp
-33, 58, 72.3, 65, 78.1, 89, 2026-04-12T20:00:00Z
+gw, your_pts, your_predicted_xp, recommended_pts, recommended_xp, dream_team_pts,
+    your_percentile_rank, best_score, top_1k_score, top_10k_score, top_100k_score,
+    top_1m_score, avg_score, ranked_count, timestamp
+33, 58, 72.3, 65, 78.1, 89, 20, 109, 85, 79, 73, 62, 38, 12914049, 2026-04-12T20:00:00Z
 ```
+
+### Benchmark Data Sources
+
+Each benchmark maps to a specific FPL API source:
+
+| Benchmark | Source | API Endpoint |
+|-----------|--------|-------------|
+| `best_score` | `events[gw].highest_score` | `bootstrap-static` (free) |
+| `avg_score` | `events[gw].average_entry_score` | `bootstrap-static` (free) |
+| `ranked_count` | `events[gw].ranked_count` | `bootstrap-static` (free) |
+| `your_percentile_rank` | `current[gw].percentile_rank` | `entry/{id}/history/` |
+| `top_1k_score` | rank 1000 entry score | Overall standings page 20 |
+| `top_10k_score` | rank 10000 entry score | Overall standings page 200 |
+| `top_100k_score` | rank 100000 entry score | Overall standings page 2000 |
+| `top_1m_score` | rank 1000000 entry score | Overall standings page 20000 |
+
+**`percentile_rank` values** are integers from the FPL-defined set
+`[1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95]`,
+where lower = better (top 1% = percentile_rank 1, median = percentile_rank 50).
+
+**Overall standings pagination:** Each page returns 50 entries.
+Endpoint: `/api/leagues-classic/{overall_league_id}/standings/?page_standings={page}`
+The overall league ID is season-specific; look it up once from `/api/entry/{id}/leagues/`
+— it is listed as the "Overall" classic league with ~13M members.
+
+**Note on `top_1m_score`:** Page 20000 may be slow on the FPL API.
+Fetch with a 30s timeout; if it fails, write `null` and log a warning.
 
 ### Data Dependencies
 
 - User team picks: fetched via `user.py` (P1 must be implemented first)
 - Recommended team: loaded from `results/recommend_gw{N}.csv` (optional — skip comparison if missing)
-- Dream team: fetched from FPL API
+- Dream team: fetched from FPL API `/api/event/{gw}/live/`
 - Predictions: loaded from `results/predictions_gw{N}.csv` (full player predictions)
 - Actual points: from live GW data (already collected by `phase_post_gw()`)
+- Benchmarks: bootstrap-static + overall league standings (4 targeted page fetches)
 
 ### CLI
 

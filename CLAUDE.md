@@ -17,15 +17,15 @@ There are two distinct systems in this repo: the **original notebook pipeline** 
 
 ```
 fpl-assistant/
-├── _original/          # Archived original files — do not modify (git-ignored)
+├── _original/          # Archived research code (git-ignored)
+│   ├── notebooks/      #   7 Jupyter notebooks (research history)
+│   ├── optimization/   #   10 R scripts (lpSolve; superseded by PuLP)
+│   └── data_collection/#   10 Python scripts (FPL/Understat/FBref scrapers)
 ├── data/
 │   └── Fantasy-Premier-League/  # vaastav dataset — clone separately (see Data Setup)
 ├── docs/               # Research paper, methodology notes, plans
-├── notebooks/          # 7 Jupyter notebooks (original research pipeline)
 ├── src/
 │   ├── config.py           # Central config — ACTIVE_MODEL path, seasons, API URLs
-│   ├── data_collection/    # 9 Python scripts — FPL API, Understat, FBref scrapers
-│   ├── optimization/       # R scripts (legacy, do not extend)
 │   └── pipeline/           # Weekly production pipeline (Python/PuLP)
 │       ├── prepare.py      # Build multi-season dataset; attaches persistent player code
 │       ├── features.py     # Vectorized rolling/momentum feature engineering
@@ -92,17 +92,8 @@ python -m pytest tests/test_integration.py -v       # requires vaastav clone
 
 ## Original Notebook Pipeline
 
-The notebooks are numbered in execution order and represent the original research pipeline (not used for live GW picks):
-
-| Step | Notebook | Description |
-|------|----------|-------------|
-| 1 | `01_eda.ipynb` | Exploratory data analysis |
-| 2 | `02_feature_engineering.ipynb` | Rolling averages, momentum, xG/xA features |
-| 3 | `03_player_clustering.ipynb` | Cluster players for cold-start handling |
-| 4 | `04_model_training.ipynb` | Train Random Forest + XGBoost (general) |
-| 5 | `05_model_training_positional.ipynb` | Positional models (GK/DEF/MID/FWD) |
-| 6 | `06_team_optimization.ipynb` | Prepare predicted points for optimizer |
-| 7 | `07_team_key_mapping.ipynb` | Player key reconciliation |
+The original research notebooks are archived in `_original/notebooks/` (git-ignored).
+See `docs/improvements-roadmap.md` for learnings, ML baselines, and improvement ideas.
 
 ---
 
@@ -139,6 +130,5 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 
 ## Known Issues
 
-- **Dependency versions**: Original notebooks used 2019 packages. `requirements.txt` is updated but some notebooks may need minor adjustments for deprecated pandas/sklearn APIs.
-- **R layer is legacy**: `src/optimization/` R scripts remain for historical reproducibility only. Do not extend them.
+- **R layer archived**: `src/optimization/` R scripts moved to `_original/optimization/`. Do not restore them.
 - **vaastav data gaps**: 2025-26 season data is not in vaastav. The weekly pipeline bridges this via live FPL API patches, but Understat/FBref features are unavailable for the current season.

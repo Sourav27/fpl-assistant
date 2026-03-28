@@ -17,29 +17,33 @@ There are two distinct systems in this repo: the **original notebook pipeline** 
 
 ```
 fpl-assistant/
-├── _original/          # Archived research code (git-ignored)
-│   ├── notebooks/      #   7 Jupyter notebooks (research history)
-│   ├── optimization/   #   10 R scripts (lpSolve; superseded by PuLP)
-│   └── data_collection/#   10 Python scripts (FPL/Understat/FBref scrapers)
+├── _original/                # Archived research code (git-ignored, NOT FOR EXTENSION)
+│   ├── notebooks/            #   7 Jupyter notebooks (research/historical only)
+│   ├── optimization/         #   10 R scripts (lpSolve; DO NOT USE — PuLP replaced)
+│   └── data_collection/      #   10 Python scripts (legacy FPL/Understat/FBref)
 ├── data/
 │   └── Fantasy-Premier-League/  # vaastav dataset — clone separately (see Data Setup)
-├── docs/               # Research paper, methodology notes, plans
+├── docs/
+│   ├── fpl-rules.md             # Full FPL constraint reference (scoring, transfers, chips)
+│   ├── improvements-roadmap.md  # P1-P5 roadmap with research insights
+│   └── superpowers/specs/       # Implementation specs for improvements
 ├── src/
-│   ├── config.py           # Central config — ACTIVE_MODEL path, seasons, API URLs
-│   └── pipeline/           # Weekly production pipeline (Python/PuLP)
-│       ├── prepare.py      # Build multi-season dataset; attaches persistent player code
-│       ├── features.py     # Vectorized rolling/momentum feature engineering
-│       ├── predict.py      # Load model, generate xP predictions
-│       ├── availability.py # Hybrid availability filter (hard exclude / soft scale)
-│       ├── optimize.py     # PuLP ILP — squad + XI + captain selection
-│       ├── fetch.py        # FPL API calls with exponential backoff
-│       └── run.py          # CLI entry point (4 phases)
-├── tests/              # pytest unit + integration tests (64 tests)
+│   ├── config.py                # Central config — ACTIVE_MODEL path, seasons, API URLs
+│   └── pipeline/                # Active weekly production pipeline (Python/PuLP)
+│       ├── prepare.py           # Build multi-season dataset; attaches persistent player code
+│       ├── features.py          # Vectorized rolling/momentum feature engineering
+│       ├── predict.py           # Load model, generate xP predictions
+│       ├── availability.py      # Hybrid availability filter (hard exclude / soft scale)
+│       ├── optimize.py          # PuLP ILP — squad + XI + captain selection
+│       ├── fetch.py             # FPL API calls with exponential backoff
+│       └── run.py               # CLI entry point (4 phases)
+├── tests/                   # pytest unit + integration tests (64 tests)
 ├── scripts/
-│   └── weekly_run.sh   # Cron-friendly wrapper with timestamped logs
-├── models/             # Trained .sav files — git-ignored; regenerate via retrain
-├── results/            # Output CSVs (xi_gwN.csv, squad_gwN.csv, snapshots/)
-├── logs/               # weekly_run.sh output — git-ignored
+│   └── weekly_run.sh        # Cron-friendly wrapper with timestamped logs
+├── models/                  # Trained .sav files — git-ignored; regenerate via retrain
+├── results/                 # Output CSVs (xi_gwN.csv, squad_gwN.csv, snapshots/)
+├── logs/                    # weekly_run.sh output — git-ignored
+├── user_config.yaml         # User team IDs & preferences (git-ignored, REQUIRED for P1 features)
 ├── requirements.txt
 └── .gitignore
 ```
@@ -90,10 +94,19 @@ python -m pytest tests/test_integration.py -v       # requires vaastav clone
 
 ---
 
-## Original Notebook Pipeline
+## Archived Research Code
 
-The original research notebooks are archived in `_original/notebooks/` (git-ignored).
-See `docs/improvements-roadmap.md` for learnings, ML baselines, and improvement ideas.
+**DO NOT EXTEND OR USE `_original/` CODE**
+
+The original research notebooks, R optimization layer, and legacy data collection scripts are archived in `_original/` for historical reference only:
+
+- `_original/notebooks/`: 7 Jupyter notebooks with early ML experiments and optimization ideas
+- `_original/optimization/`: 10 R scripts using lpSolve (superseded by Python/PuLP)
+- `_original/data_collection/`: legacy scrapers for FPL, Understat, FBref (not maintained)
+
+**Why archived?** These were proof-of-concept research. The active production system is in `src/pipeline/` (Python, PuLP-based). Any improvements should extend the active pipeline, not the archived code.
+
+**Learn from archives:** See `docs/improvements-roadmap.md` for key learnings and improvement ideas (P1-P5) derived from this research.
 
 ---
 
@@ -115,6 +128,10 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 - Squad: 2 GK + 5 DEF + 5 MID + 3 FWD (15 players)
 - XI: 1 GK, 3–5 DEF, 2–5 MID, 1–3 FWD (11 players)
 - Max 3 players from any single club
+- Transfers: Up to 5 free transfers per gameweek (banking allowed, cap 5), -4 points per extra transfer
+- Chips: 2× Wildcard, 2× Freehit, 2× Bench Boost, 2× Triple Captain (split across season halves)
+
+**Full rules:** See `docs/fpl-rules.md` for complete scoring, BPS, transfer, and chip mechanics.
 
 ---
 

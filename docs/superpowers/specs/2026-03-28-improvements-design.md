@@ -360,24 +360,31 @@ Dream team gap: -24 pts (recommended vs ceiling)
 ```csv
 gw, your_pts, your_predicted_xp, recommended_pts, recommended_xp, dream_team_pts,
     your_percentile_rank, best_score, top_1k_score, top_10k_score, top_100k_score,
-    top_1m_score, avg_score, ranked_count, timestamp
-33, 58, 72.3, 65, 78.1, 89, 20, 109, 85, 79, 73, 62, 38, 12914049, 2026-04-12T20:00:00Z
+    top_1m_score, avg_score, median_score, ranked_count, timestamp
+33, 58, 72.3, 65, 78.1, 89, 20, 109, 85, 79, 73, 62, 38, 36, 12914049, 2026-04-12T20:00:00Z
 ```
 
 ### Benchmark Data Sources
 
 Each benchmark maps to a specific FPL API source:
 
-| Benchmark | Source | API Endpoint |
-|-----------|--------|-------------|
-| `best_score` | `events[gw].highest_score` | `bootstrap-static` (free) |
-| `avg_score` | `events[gw].average_entry_score` | `bootstrap-static` (free) |
-| `ranked_count` | `events[gw].ranked_count` | `bootstrap-static` (free) |
-| `your_percentile_rank` | `current[gw].percentile_rank` | `entry/{id}/history/` |
-| `top_1k_score` | rank 1000 entry score | Overall standings page 20 |
-| `top_10k_score` | rank 10000 entry score | Overall standings page 200 |
-| `top_100k_score` | rank 100000 entry score | Overall standings page 2000 |
-| `top_1m_score` | rank 1000000 entry score | Overall standings page 20000 |
+| Benchmark | Source | API Endpoint | Cost |
+|-----------|--------|-------------|------|
+| `best_score` | `events[gw].highest_score` | `bootstrap-static` | Free |
+| `avg_score` | `events[gw].average_entry_score` | `bootstrap-static` | Free — **mean**, not median |
+| `ranked_count` | `events[gw].ranked_count` | `bootstrap-static` | Free |
+| `your_percentile_rank` | `current[gw].percentile_rank` | `entry/{id}/history/` | Free |
+| `top_1k_score` | score at rank 1000 | Overall standings page 20 | 1 API call |
+| `top_10k_score` | score at rank 10000 | Overall standings page 200 | 1 API call |
+| `top_100k_score` | score at rank 100000 | Overall standings page 2000 | 1 API call |
+| `top_1m_score` | score at rank 1000000 | Overall standings page 20000 | 1 API call (slow) |
+| `median_score` | score at rank `ranked_count / 2` | Overall standings page `ranked_count / 100` | 1 API call (very slow) |
+
+**`avg_score` vs `median_score`:** `avg_score` is the arithmetic mean from bootstrap (free, fast).
+`median_score` is the true 50th percentile score — the score that exactly half of managers beat.
+For a right-skewed score distribution (most managers cluster below the mean), median < mean.
+Both are worth tracking: `avg_score` reflects total points in the population; `median_score`
+is the more meaningful "did I beat half the field?" benchmark.
 
 **`percentile_rank` values** are integers from the FPL-defined set
 `[1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95]`,
@@ -388,8 +395,10 @@ Endpoint: `/api/leagues-classic/{overall_league_id}/standings/?page_standings={p
 The overall league ID is season-specific; look it up once from `/api/entry/{id}/leagues/`
 — it is listed as the "Overall" classic league with ~13M members.
 
-**Note on `top_1m_score`:** Page 20000 may be slow on the FPL API.
-Fetch with a 30s timeout; if it fails, write `null` and log a warning.
+**Slow fetches (`top_1m_score`, `median_score`):** Pages 20000+ may time out.
+Fetch with a 30s timeout; if it fails, write `null` and log a warning. These are
+the lowest-priority benchmarks — `best_score`, `top_1k_score`, and `avg_score`
+are most actionable.
 
 ### Data Dependencies
 

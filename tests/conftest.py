@@ -1,6 +1,5 @@
 import pytest
 import pandas as pd
-import json
 
 @pytest.fixture
 def sample_bootstrap_json():

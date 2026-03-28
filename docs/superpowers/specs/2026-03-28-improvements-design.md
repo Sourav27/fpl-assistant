@@ -192,17 +192,34 @@ Players with two fixtures (double GW) get `xP` summed across both fixtures.
 Fixture data from the FPL API fixtures endpoint determines BGW/DGW status per team.
 
 **FDR weighting for future GWs:**
-Use fixture difficulty ratings from the FPL API fixtures endpoint. For each player,
-look up their team's opponent difficulty in each future GW. Apply a configurable
-scaling function. Default: `fdr_weight = 1.0 - fdr_sensitivity * (fdr - 3) / 2`
-with `fdr_sensitivity = 0.15` (configurable in `user_config.yaml`), giving:
+Fixture Difficulty Rating (FDR) rates the perceived difficulty of opponents on a scale
+of 1-5 (per FPL FAQs). For each player in future GWs, look up their team's opponent FDR
+from the FPL API fixtures endpoint (`team_h_difficulty` / `team_a_difficulty` fields).
+Apply a configurable scaling function that moderates the FDR impact.
+
+Formula: `fdr_weight = 1.0 - fdr_sensitivity * (fdr - 3) / 2`
+
+Default `fdr_sensitivity = 0.15` (configurable in `user_config.yaml`), giving:
+- FDR 1 (very easy) → 1.15
 - FDR 2 (easy) → 1.075
 - FDR 3 (average) → 1.0
 - FDR 4 (hard) → 0.925
 - FDR 5 (very hard) → 0.85
 
-This avoids the extreme 0.25 multiplier that would cause overfit to fixture difficulty.
-GW 1 (current) uses raw xP with no FDR discount.
+This keeps weights in a reasonable range (0.85–1.15) and avoids extreme overweighting
+of fixture difficulty. Current GW (GW 1 of the horizon) uses raw xP with no FDR weight.
+
+**FDR data sourcing:**
+Fixture Difficulty Ratings are embedded in the FPL API fixtures endpoint and available in
+the vaastav dataset's `fixtures.csv`. The existing pipeline (`prepare.py:add_fixture_difficulty()`)
+joins these ratings onto player data via the `fixture` column, creating `fdr_opp` (opponent
+difficulty from the player's perspective). For `recommend.py`:
+- Fetch current fixtures from FPL API: `/api/fixtures/`
+- For each player and future GW, look up their team's next fixture
+- Extract the opponent's FDR from the fixture record
+- Apply the weighting formula above
+
+If fixture data is unavailable (unexpected), fall back to no FDR weighting (fdr_weight = 1.0).
 
 **Player pool pre-filtering (solve time):**
 A 5-GW horizon with 500+ players creates a large ILP. Pre-filter to top N players

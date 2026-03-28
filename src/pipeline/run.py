@@ -131,8 +131,9 @@ def phase_predict(target_gw: int | None = None):
                     on="element", how="left", suffixes=("_feat", ""),
                 )
         predictions = latest[["element", "name", "position", "team"]].copy()
-        predictions["xP"] = latest["xP"] if "xP" in latest.columns else 0
-        predictions["now_cost"] = latest["now_cost"]
+        predictions["xP"] = (latest["xP"] if "xP" in latest.columns else 0)
+        predictions["xP"] = predictions["xP"].fillna(0).clip(lower=0)
+        predictions["now_cost"] = latest["now_cost"].fillna(50)
     else:
         predictions = predict_next_gw(latest, model_path)
 

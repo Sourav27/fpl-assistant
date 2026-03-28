@@ -53,3 +53,6 @@ Thumbs.db
 
 # Git worktrees
 .worktrees/
+
+# User-specific config (contains private FPL entry IDs)
+user_config.yaml

@@ -1,0 +1,15 @@
+# user_config.example.yaml — copy to user_config.yaml and fill in your IDs
+# user_config.yaml is gitignored — never commit it
+
+teams:
+  default:
+    entry_id: 1234567      # your FPL entry ID (from fantasy.premierleague.com/entry/{id}/event/1)
+    label: "Main"
+  alt:                     # optional second team
+    entry_id: 7654321
+    label: "Experimental"
+
+preferences:
+  horizon_gws: 5           # GWs to plan ahead (1 = this GW only, max 5)
+  max_hit_points: 8        # max penalty points per GW (-4 per hit, so 8 = max 2 extra transfers)
+  fdr_sensitivity: 0.15    # how much fixture difficulty shifts xP (0 = ignore FDR, 0.3 = aggressive)

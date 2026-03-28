@@ -28,3 +28,6 @@ pytest-mock>=3.10.0
 
 # Optimization (Python replacement for R lpSolve)
 PuLP>=2.7.0
+
+# Configuration
+pyyaml>=6.0

@@ -1,4 +1,5 @@
 from pathlib import Path
+import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path("data")
@@ -11,6 +12,73 @@ FPL_API_BASE = "https://fantasy.premierleague.com/api"
 FPL_BOOTSTRAP_URL = f"{FPL_API_BASE}/bootstrap-static/"
 FPL_PLAYER_URL = f"{FPL_API_BASE}/element-summary"  # /{id}/
 FPL_FIXTURES_URL = f"{FPL_API_BASE}/fixtures/"
+FPL_ENTRY_URL = f"{FPL_API_BASE}/entry"        # /{id}/ → entry info + bank
+FPL_EVENT_URL = f"{FPL_API_BASE}/event"         # /{gw}/live/ → live GW scores
+FPL_LEAGUES_CLASSIC_URL = f"{FPL_API_BASE}/leagues-classic"  # /{id}/standings/
+
+USER_CONFIG_DEFAULTS = {
+    "horizon_gws": 5,
+    "max_hit_points": 8,
+    "fdr_sensitivity": 0.15,
+}
+
+
+class UserConfigError(ValueError):
+    """Raised when user_config.yaml is missing or invalid."""
+    pass
+
+
+def load_user_config(path: Path | None = None) -> dict:
+    """Load and validate user_config.yaml.
+
+    Returns config dict with defaults applied for missing preference keys.
+    Raises UserConfigError for missing file or invalid values.
+    """
+    if path is None:
+        path = PROJECT_ROOT / "user_config.yaml"
+
+    if not path.exists():
+        example = path.parent / "user_config.example.yaml"
+        raise UserConfigError(
+            f"user_config.yaml not found at {path}. "
+            f"Copy {example} and fill in your entry_id."
+        )
+
+    with open(path) as f:
+        cfg = yaml.safe_load(f) or {}
+
+    # Validate required: teams.default.entry_id
+    teams = cfg.get("teams", {})
+    default_team = teams.get("default", {})
+    entry_id = default_team.get("entry_id")
+    if entry_id is None:
+        raise UserConfigError("user_config.yaml: teams.default.entry_id is required")
+    if not isinstance(entry_id, int):
+        raise UserConfigError(
+            f"user_config.yaml: teams.default.entry_id must be an integer, got {entry_id!r}"
+        )
+
+    # Validate alt team if present
+    alt_team = teams.get("alt", {})
+    if alt_team and "entry_id" in alt_team:
+        if not isinstance(alt_team["entry_id"], int):
+            raise UserConfigError("user_config.yaml: teams.alt.entry_id must be an integer")
+
+    # Apply defaults for preferences
+    prefs = cfg.get("preferences", {})
+    for key, default in USER_CONFIG_DEFAULTS.items():
+        prefs.setdefault(key, default)
+    cfg["preferences"] = prefs
+
+    # Validate horizon_gws
+    horizon = prefs["horizon_gws"]
+    if not isinstance(horizon, int) or not (1 <= horizon <= 5):
+        raise UserConfigError(
+            f"user_config.yaml: horizon_gws must be an integer 1-5, got {horizon!r}"
+        )
+
+    return cfg
+
 
 CURRENT_SEASON = "2025-26"
 SEASONS = [

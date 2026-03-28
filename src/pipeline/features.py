@@ -1,7 +1,6 @@
 # src/pipeline/features.py
 """Vectorized feature engineering — replaces NB02 iterrows approach."""
 import pandas as pd
-import numpy as np
 
 ROLLING_COLS = [
     "total_points", "minutes", "ict_index", "bps",

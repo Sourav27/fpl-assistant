@@ -192,34 +192,44 @@ Players with two fixtures (double GW) get `xP` summed across both fixtures.
 Fixture data from the FPL API fixtures endpoint determines BGW/DGW status per team.
 
 **FDR weighting for future GWs:**
-Fixture Difficulty Rating (FDR) rates the perceived difficulty of opponents on a scale
-of 1-5 (per FPL FAQs). For each player in future GWs, look up their team's opponent FDR
-from the FPL API fixtures endpoint (`team_h_difficulty` / `team_a_difficulty` fields).
-Apply a configurable scaling function that moderates the FDR impact.
+Fixture Difficulty Rating (FDR) measures how hard a given fixture is **for a specific team**
+on a 1-5 scale (per FPL FAQ). Each fixture has two separate FDR values — one per team:
+- `team_h_difficulty`: how hard the fixture is **for the home team**
+- `team_a_difficulty`: how hard the fixture is **for the away team**
 
-Formula: `fdr_weight = 1.0 - fdr_sensitivity * (fdr - 3) / 2`
+For xP weighting we want the player's own team FDR (not the opponent's). A player on
+the home team uses `team_h_difficulty`; a player on the away team uses `team_a_difficulty`.
+The existing pipeline names this `fdr_team` (see `prepare.py:add_fixture_difficulty()`).
+
+For future GWs in the horizon, look up `fdr_team` from the FPL API fixtures endpoint:
+```
+fdr = team_h_difficulty  (if player's team is home)
+fdr = team_a_difficulty  (if player's team is away)
+```
+
+Apply a configurable scaling function. Formula: `fdr_weight = 1.0 - fdr_sensitivity * (fdr - 3) / 2`
 
 Default `fdr_sensitivity = 0.15` (configurable in `user_config.yaml`), giving:
-- FDR 1 (very easy) → 1.15
-- FDR 2 (easy) → 1.075
+- FDR 1 (very easy opponent) → 1.15 — boost xP
+- FDR 2 (easy opponent) → 1.075
 - FDR 3 (average) → 1.0
-- FDR 4 (hard) → 0.925
-- FDR 5 (very hard) → 0.85
+- FDR 4 (hard opponent) → 0.925
+- FDR 5 (very hard opponent) → 0.85 — discount xP
 
-This keeps weights in a reasonable range (0.85–1.15) and avoids extreme overweighting
-of fixture difficulty. Current GW (GW 1 of the horizon) uses raw xP with no FDR weight.
+This keeps weights in a reasonable range (0.85–1.15) and avoids extreme overweighting.
+Current GW (GW 1 of the horizon) uses raw xP with no FDR adjustment.
 
 **FDR data sourcing:**
-Fixture Difficulty Ratings are embedded in the FPL API fixtures endpoint and available in
-the vaastav dataset's `fixtures.csv`. The existing pipeline (`prepare.py:add_fixture_difficulty()`)
-joins these ratings onto player data via the `fixture` column, creating `fdr_opp` (opponent
-difficulty from the player's perspective). For `recommend.py`:
-- Fetch current fixtures from FPL API: `/api/fixtures/`
-- For each player and future GW, look up their team's next fixture
-- Extract the opponent's FDR from the fixture record
+FDR is embedded in the FPL API fixtures endpoint (`/api/fixtures/`) and the vaastav
+`fixtures.csv`. The pipeline (`prepare.py:add_fixture_difficulty()`) joins FDR onto
+historical GW data, creating `fdr_team` (difficulty for the player's own team) and
+`fdr_opp` (difficulty for the opponent). For `recommend.py`, only `fdr_team` is used:
+- Fetch fixtures from FPL API: `/api/fixtures/?event={gw}`
+- For each player and future GW, find their team's fixture
+- Extract `team_h_difficulty` if home, `team_a_difficulty` if away → this is `fdr_team`
 - Apply the weighting formula above
 
-If fixture data is unavailable (unexpected), fall back to no FDR weighting (fdr_weight = 1.0).
+If fixture data is unavailable, fall back to no FDR weighting (`fdr_weight = 1.0`).
 
 **Player pool pre-filtering (solve time):**
 A 5-GW horizon with 500+ players creates a large ILP. Pre-filter to top N players

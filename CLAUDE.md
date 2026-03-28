@@ -2,119 +2,143 @@
 
 Academic study project (2023, "IIM Blasters" team) for Fantasy Premier League prediction and team selection using ML-based point prediction and constrained portfolio optimization.
 
+There are two distinct systems in this repo: the **original notebook pipeline** (research/historical) and the **weekly production pipeline** (`src/pipeline/`, live GW use).
+
 ---
 
 ## Tech Stack
 
-- **Python**: pandas, scikit-learn, xgboost, beautifulsoup4 (data collection, feature engineering, modeling)
-- **R**: lpSolve (team optimization)
-- Dual-language by current design; consolidation to a single language is planned (R → Python).
+- **Python**: pandas, scikit-learn, xgboost, pulp, beautifulsoup4
+- **R**: lpSolve — legacy notebooks only. Do not extend. PuLP has replaced it for live optimization.
 
 ---
 
 ## Directory Structure
 
 ```
-fpl-optimization/
+fpl-assistant/
 ├── _original/          # Archived original files — do not modify (git-ignored)
-├── data/               # Data instructions and README; external dataset cloned here
-├── docs/               # Research paper, methodology notes, literature
-├── notebooks/          # 7 Jupyter notebooks numbered in pipeline order
+├── data/
+│   └── Fantasy-Premier-League/  # vaastav dataset — clone separately (see Data Setup)
+├── docs/               # Research paper, methodology notes, plans
+├── notebooks/          # 7 Jupyter notebooks (original research pipeline)
 ├── src/
-│   ├── data_collection/  # 9 Python scripts — scrape FPL API, Understat, FBref
-│   └── optimization/     # 10 R scripts — lpSolve-based team selection
-├── models/             # Trained model files (.sav) — git-ignored
-├── results/            # Output CSVs and comparison XLSX files
-├── plots/              # Visualization PNGs
+│   ├── config.py           # Central config — ACTIVE_MODEL path, seasons, API URLs
+│   ├── data_collection/    # 9 Python scripts — FPL API, Understat, FBref scrapers
+│   ├── optimization/       # R scripts (legacy, do not extend)
+│   └── pipeline/           # Weekly production pipeline (Python/PuLP)
+│       ├── prepare.py      # Build multi-season dataset; attaches persistent player code
+│       ├── features.py     # Vectorized rolling/momentum feature engineering
+│       ├── predict.py      # Load model, generate xP predictions
+│       ├── availability.py # Hybrid availability filter (hard exclude / soft scale)
+│       ├── optimize.py     # PuLP ILP — squad + XI + captain selection
+│       ├── fetch.py        # FPL API calls with exponential backoff
+│       └── run.py          # CLI entry point (4 phases)
+├── tests/              # pytest unit + integration tests (64 tests)
+├── scripts/
+│   └── weekly_run.sh   # Cron-friendly wrapper with timestamped logs
+├── models/             # Trained .sav files — git-ignored; regenerate via retrain
+├── results/            # Output CSVs (xi_gwN.csv, squad_gwN.csv, snapshots/)
+├── logs/               # weekly_run.sh output — git-ignored
 ├── requirements.txt
 └── .gitignore
 ```
 
 ---
 
-## Pipeline Workflow
+## Weekly Pipeline — Quick Start
 
-The notebooks are numbered to reflect execution order:
+```bash
+pip install -r requirements.txt
+git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Premier-League
+```
+
+### CLI Phases
+
+```bash
+# Phase 1 — before GW deadline: fetch bootstrap, save xP snapshot
+python -m src.pipeline.run pre-deadline
+
+# Phase 2 — generate team selection
+python -m src.pipeline.run predict --gw <N>
+
+# Phase 3 — after GW ends: collect live results
+python -m src.pipeline.run post-gw
+
+# Phase 4 — retrain model on expanded data
+python -m src.pipeline.run retrain --gw <N>
+
+# Or run phases 1+2 together
+python -m src.pipeline.run full
+```
+
+### Model Management
+
+`ACTIVE_MODEL` in `src/config.py` controls which model is used. To promote a newly trained model:
+```python
+# src/config.py
+ACTIVE_MODEL = MODELS_DIR / "rf_model_gw<N>.sav"
+```
+If the model file is missing or has mismatched feature names, the pipeline automatically falls back to FPL API `ep_next` values.
+
+### Running Tests
+
+```bash
+python -m pytest tests/ -q                          # unit tests only (fast)
+python -m pytest tests/test_integration.py -v       # requires vaastav clone
+```
+
+---
+
+## Original Notebook Pipeline
+
+The notebooks are numbered in execution order and represent the original research pipeline (not used for live GW picks):
 
 | Step | Notebook | Description |
 |------|----------|-------------|
 | 1 | `01_eda.ipynb` | Exploratory data analysis |
-| 2 | `02_feature_engineering.ipynb` | Creates time series features: rolling averages, momentum, xG/xA metrics |
-| 3 | `03_player_clustering.ipynb` | Clusters players to handle new players without historical data |
-| 4 | `04_model_training.ipynb` | Trains Random Forest and XGBoost models (general) |
-| 5 | `05_model_training_positional.ipynb` | Trains positional models (GK/DEF/MID/FWD) |
-| 6 | `06_team_optimization.ipynb` | Prepares predicted points for optimizer input |
-| 7 | `07_team_key_mapping.ipynb` | Maps player keys between data sources |
-
-**Data collection** runs before the notebooks: `src/data_collection/` scripts scrape the FPL API, Understat, and FBref to produce raw data.
-
-**Optimization** runs after notebooks 04–06: R scripts in `src/optimization/` consume the predicted points CSVs from `results/` and apply lpSolve constraints.
-
-### Notebook Data Dependencies
-
-```
-src/data_collection/ → raw data
-    → 01_eda (exploration only)
-    → 02_feature_engineering → engineered features
-        → 03_player_clustering → cluster assignments
-        → 04_model_training → models/ (.sav files)
-        → 05_model_training_positional → models/ (.sav files)
-            → 06_team_optimization → results/ (predicted points CSVs)
-                → src/optimization/ (R scripts) → final team selection
-07_team_key_mapping → used as needed for player ID reconciliation
-```
+| 2 | `02_feature_engineering.ipynb` | Rolling averages, momentum, xG/xA features |
+| 3 | `03_player_clustering.ipynb` | Cluster players for cold-start handling |
+| 4 | `04_model_training.ipynb` | Train Random Forest + XGBoost (general) |
+| 5 | `05_model_training_positional.ipynb` | Positional models (GK/DEF/MID/FWD) |
+| 6 | `06_team_optimization.ipynb` | Prepare predicted points for optimizer |
+| 7 | `07_team_key_mapping.ipynb` | Player key reconciliation |
 
 ---
 
 ## Data Setup
 
-The notebooks depend on the external **vaastav/Fantasy-Premier-League** dataset. Clone it into the `data/` directory:
+Both pipelines depend on the **vaastav/Fantasy-Premier-League** dataset:
 
 ```bash
 git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Premier-League
 ```
 
-See `data/README` for further instructions.
+**Note:** vaastav stopped weekly updates after 2024-25. The weekly pipeline patches current-season data directly from the live FPL API (`pre-deadline` and `post-gw` phases).
 
 ---
 
-## Setup Commands
+## FPL Constraints (optimizer)
 
-**Python:**
-```bash
-pip install -r requirements.txt
-```
-
-**R:**
-```r
-install.packages("lpSolve")
-```
-
----
-
-## Optimization Strategies
-
-The R scripts in `src/optimization/` implement four strategies:
-
-- **xP maximization** — maximize total expected points
-- **Sharpe ratio** — maximize expected points relative to variance
-- **Minimum risk** — minimize variance subject to a points floor
-- **Best team** — select the highest-scoring historical team (benchmark)
-
----
-
-## FPL Constraints
-
-The optimizer enforces standard FPL squad rules:
-
-- Budget: £100M
+- Budget: £100M (1000 in 0.1M units)
 - Squad: 2 GK + 5 DEF + 5 MID + 3 FWD (15 players)
+- XI: 1 GK, 3–5 DEF, 2–5 MID, 1–3 FWD (11 players)
 - Max 3 players from any single club
+
+---
+
+## Gotchas
+
+- **Element ID recycling**: FPL recycles `element` IDs each season. The pipeline uses the `code` field from `players_raw.csv` as the persistent cross-season player identifier. Never group historical GW data by `element` alone — always use `code`.
+- **Stale models**: `rf_model.sav` (original notebooks) has 117 features with old naming (`1_assists` etc). Current pipeline uses 18 features (`assists_roll_4` etc). After cloning, run `retrain` before `predict` or the pipeline falls back to API xP.
+- **models/ is git-ignored**: `.sav` files must be regenerated. After cloning, run `python -m src.pipeline.run retrain --gw <latest>`.
+- **Bootstrap cache**: `results/snapshots/bootstrap_gw<N>.json` is used if < 48h old. Delete it to force a fresh API fetch.
+- **Windows junction for data**: If using git worktrees, `data/Fantasy-Premier-League` is not copied. Create a directory junction: `mklink /J .worktrees/<branch>/data/Fantasy-Premier-League data/Fantasy-Premier-League`.
 
 ---
 
 ## Known Issues
 
-- **Dependency versions**: Original requirements were from 2019 (e.g., pandas 0.25.3). `requirements.txt` has been updated to current versions, but some notebooks may require minor adjustments for API changes (e.g., deprecated pandas/sklearn parameters).
-- **Language consolidation**: The R optimization layer is a known debt item. Migration to Python (e.g., PuLP or scipy.optimize) is planned but not yet done. Do not invest in extending the R scripts.
-- **Ignored artifacts**: `models/` and `_original/` are git-ignored. Trained `.sav` files must be regenerated by running the pipeline.
+- **Dependency versions**: Original notebooks used 2019 packages. `requirements.txt` is updated but some notebooks may need minor adjustments for deprecated pandas/sklearn APIs.
+- **R layer is legacy**: `src/optimization/` R scripts remain for historical reproducibility only. Do not extend them.
+- **vaastav data gaps**: 2025-26 season data is not in vaastav. The weekly pipeline bridges this via live FPL API patches, but Understat/FBref features are unavailable for the current season.

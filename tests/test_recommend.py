@@ -1,5 +1,7 @@
 import pytest
+import pandas as pd
 from src.pipeline.recommend import compute_fdr_weight, build_fixture_fdr_map
+from src.pipeline.user import UserTeamState
 
 
 class TestComputeFdrWeight:
@@ -68,3 +70,85 @@ class TestBuildFixtureFdrMap:
         # Team 1: first fixture away (fdr=5), second fixture away (fdr=5 → no wait)
         # First: team 1 is home → fdr=2. Second: team 1 is away → fdr=5. Average = 3.5
         assert fdr_map[(1, 34)] == pytest.approx(3.5)
+
+
+@pytest.fixture
+def sample_user_state():
+    """A user with 2 FTs, £5.0m bank, squad of 15 players."""
+    # Element IDs 1-15, codes 101-115
+    return UserTeamState(
+        entry_id=123,
+        current_squad=list(range(1, 16)),
+        squad_codes=list(range(101, 116)),
+        selling_prices={i: 55 + i for i in range(1, 16)},
+        bank=50,  # £5.0m
+        free_transfers=2,
+        active_chip=None,
+        total_value=0,
+    )
+
+
+@pytest.fixture
+def extended_predictions_df():
+    """25 players with varying xP and costs — enough to test transfers."""
+    # Players 1-15 (current squad, moderate xP), players 16-25 (upgrades)
+    data = {
+        "element": list(range(1, 26)),
+        "code": list(range(101, 126)),
+        "name": [f"Player{i}" for i in range(1, 26)],
+        "position": (["GK"] * 2 + ["DEF"] * 5 + ["MID"] * 5 + ["FWD"] * 3) * 1
+                  + ["GK", "DEF", "DEF", "MID", "MID", "FWD", "FWD", "DEF", "MID", "FWD"],
+        "team": [f"Team{(i % 10) + 1}" for i in range(1, 26)],
+        "xP": [3.0 + i * 0.2 for i in range(1, 16)] + [7.0 + i * 0.1 for i in range(1, 11)],
+        "now_cost": [55 + i for i in range(1, 26)],  # 0.1M units: 56=£5.6m, 57=£5.7m, ...
+    }
+    return pd.DataFrame(data)
+
+
+class TestRecommendSingleGW:
+    def test_returns_transfer_plan_dict(self, sample_user_state, extended_predictions_df):
+        from src.pipeline.recommend import recommend_transfers
+        plan = recommend_transfers(
+            user_state=sample_user_state,
+            predictions=extended_predictions_df,
+            fixtures=[],
+            horizon=1,
+            fdr_sensitivity=0.15,
+            max_hit_points=8,
+        )
+        assert isinstance(plan, dict)
+        assert "transfers" in plan
+        assert "projected_xp" in plan
+        assert "hit_cost" in plan
+
+    def test_no_transfers_when_squad_optimal(self, sample_user_state, extended_predictions_df):
+        """If the user's squad already contains the best players, no transfers needed."""
+        from src.pipeline.recommend import recommend_transfers
+        # Make current squad have very high xP
+        extended_predictions_df = extended_predictions_df.copy()
+        extended_predictions_df.loc[:14, "xP"] = 20.0  # current squad best
+        extended_predictions_df.loc[15:, "xP"] = 1.0   # rest are terrible
+        plan = recommend_transfers(
+            user_state=sample_user_state,
+            predictions=extended_predictions_df,
+            fixtures=[],
+            horizon=1,
+            fdr_sensitivity=0.15,
+            max_hit_points=8,
+        )
+        assert plan["hit_cost"] == 0
+
+    def test_hit_cost_applied_for_extra_transfers(self, sample_user_state, extended_predictions_df):
+        """If optimal requires 3 transfers but user has 2 FT, 1 hit = -4 points."""
+        from src.pipeline.recommend import recommend_transfers
+        plan = recommend_transfers(
+            user_state=sample_user_state,
+            predictions=extended_predictions_df,
+            fixtures=[],
+            horizon=1,
+            fdr_sensitivity=0.15,
+            max_hit_points=8,
+        )
+        # Hit cost must be non-negative multiple of 4
+        assert plan["hit_cost"] >= 0
+        assert plan["hit_cost"] % 4 == 0

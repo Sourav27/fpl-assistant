@@ -1,0 +1,136 @@
+# tests/test_run.py
+import json
+import pytest
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+from src.pipeline.run import phase_pre_deadline, phase_predict, phase_post_gw, phase_retrain
+
+
+class TestPhasePreDeadline:
+    def test_saves_xp_snapshot(self, tmp_path, sample_bootstrap_json):
+        with patch("src.pipeline.run.fetch_bootstrap", return_value=sample_bootstrap_json), \
+             patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
+             patch("src.pipeline.run.RESULTS_DIR", tmp_path / "results"):
+            (tmp_path / "FPL" / "data" / "2025-26" / "gws").mkdir(parents=True)
+            (tmp_path / "results").mkdir()
+
+            next_gw = phase_pre_deadline()
+
+        assert next_gw == 31
+        xp_path = tmp_path / "FPL" / "data" / "2025-26" / "gws" / "xP31.csv"
+        assert xp_path.exists()
+
+    def test_saves_bootstrap_snapshot(self, tmp_path, sample_bootstrap_json):
+        with patch("src.pipeline.run.fetch_bootstrap", return_value=sample_bootstrap_json), \
+             patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
+             patch("src.pipeline.run.RESULTS_DIR", tmp_path / "results"):
+            (tmp_path / "FPL" / "data" / "2025-26" / "gws").mkdir(parents=True)
+            (tmp_path / "results").mkdir()
+
+            phase_pre_deadline()
+
+        snapshot_path = tmp_path / "results" / "snapshots" / "bootstrap_gw31.json"
+        assert snapshot_path.exists()
+        data = json.loads(snapshot_path.read_text())
+        assert "elements" in data
+
+
+class TestPhasePostGw:
+    def test_saves_live_gw_csv(self, tmp_path, sample_bootstrap_json, sample_player_history_json):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = sample_player_history_json
+
+        gw_dir = tmp_path / "FPL" / "data" / "2025-26" / "gws"
+        gw_dir.mkdir(parents=True)
+
+        with patch("src.pipeline.run.fetch_bootstrap", return_value=sample_bootstrap_json), \
+             patch("src.pipeline.run.fetch_fixtures", return_value=[]), \
+             patch("src.pipeline.run.fetch_live_gw_data") as mock_fetch_live, \
+             patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
+             patch("src.pipeline.run.RESULTS_DIR", tmp_path / "results"):
+            import pandas as pd
+            mock_fetch_live.return_value = pd.DataFrame({
+                "name": ["Saka"], "element": [3], "GW": [30],
+                "total_points": [8], "position": ["MID"], "team": ["Arsenal"],
+            })
+            (tmp_path / "results").mkdir()
+
+            phase_post_gw()
+
+        live_path = gw_dir / "gw30_live.csv"
+        assert live_path.exists()
+
+
+class TestPhasePredict:
+    def test_writes_output_csvs(self, tmp_path, sample_bootstrap_json):
+        import pandas as pd
+        import numpy as np
+
+        # Create minimal vaastav data
+        gw_dir = tmp_path / "FPL" / "data" / "2025-26" / "gws"
+        gw_dir.mkdir(parents=True)
+        rows = []
+        for gw in range(1, 10):
+            rows.append({
+                "name": "Saka", "position": "MID", "team": "Arsenal",
+                "element": 3, "total_points": np.random.randint(2, 12),
+                "minutes": 90, "goals_scored": 0, "assists": 0,
+                "clean_sheets": 0, "ict_index": 10.0, "influence": 30.0,
+                "creativity": 25.0, "threat": 40.0, "bps": 20, "bonus": 1,
+                "value": 105, "transfers_in": 5000, "transfers_out": 1000,
+                "selected": 3000000, "was_home": True, "opponent_team": 10,
+                "fixture": gw, "round": gw, "GW": gw,
+            })
+        pd.DataFrame(rows).to_csv(gw_dir / "merged_gw.csv", index=False)
+
+        # Save bootstrap snapshot for availability filtering
+        results_dir = tmp_path / "results"
+        snapshot_dir = results_dir / "snapshots"
+        snapshot_dir.mkdir(parents=True)
+        with open(snapshot_dir / "bootstrap_gw10.json", "w") as f:
+            json.dump(sample_bootstrap_json, f)
+
+        # Mock model to not exist → falls back to xP=0
+        with patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
+             patch("src.pipeline.run.RESULTS_DIR", results_dir), \
+             patch("src.pipeline.run.ACTIVE_MODEL", tmp_path / "nonexistent.sav"), \
+             patch("src.pipeline.run.CURRENT_SEASON", "2025-26"):
+            # Will warn about missing model, use fallback
+            result = phase_predict(target_gw=10)
+
+        assert (results_dir / "xi_gw10.csv").exists()
+        assert (results_dir / "squad_gw10.csv").exists()
+
+
+class TestPhaseRetrain:
+    def test_saves_new_model(self, tmp_path):
+        import pandas as pd
+        import numpy as np
+
+        # Create minimal vaastav data with enough rows
+        gw_dir = tmp_path / "FPL" / "data" / "2025-26" / "gws"
+        gw_dir.mkdir(parents=True)
+        rows = []
+        for player in range(1, 6):
+            for gw in range(1, 20):
+                rows.append({
+                    "name": f"Player{player}", "position": "MID", "team": "Arsenal",
+                    "element": player, "total_points": np.random.randint(0, 15),
+                    "minutes": 90, "goals_scored": 0, "assists": 0,
+                    "clean_sheets": 0, "ict_index": 10.0, "influence": 30.0,
+                    "creativity": 25.0, "threat": 40.0, "bps": 20, "bonus": 1,
+                    "value": 100, "transfers_in": 5000, "transfers_out": 1000,
+                    "selected": 3000000, "was_home": True, "opponent_team": 10,
+                    "fixture": gw, "round": gw, "GW": gw, "season": "2025-26",
+                })
+        pd.DataFrame(rows).to_csv(gw_dir / "merged_gw.csv", index=False)
+
+        models_dir = tmp_path / "models"
+        with patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
+             patch("src.pipeline.run.MODELS_DIR", models_dir), \
+             patch("src.pipeline.run.ACTIVE_MODEL", models_dir / "rf_model.sav"), \
+             patch("src.pipeline.run.CURRENT_SEASON", "2025-26"):
+            phase_retrain(target_gw=32)
+
+        assert (models_dir / "rf_model_gw32.sav").exists()

@@ -1,9 +1,10 @@
 # FPL Optimization — IIM Blasters
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
+![Python](https://img.shields.io/badge/Python-3.12%2B-blue?logo=python)
 ![R](https://img.shields.io/badge/R-4.0%2B-276DC3?logo=r)
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.1%2B-F7931E?logo=scikit-learn)
 ![XGBoost](https://img.shields.io/badge/XGBoost-1.7%2B-red)
+![PuLP](https://img.shields.io/badge/PuLP-2.7%2B-orange)
 ![License](https://img.shields.io/badge/License-Academic-lightgrey)
 
 A research project combining machine learning prediction and portfolio optimization to select optimal Fantasy Premier League (FPL) squads. Developed by the **IIM Blasters** team as an academic study at the Indian Institute of Management (2023).
@@ -12,7 +13,141 @@ The system predicts per-player expected points (xP) using Random Forest and XGBo
 
 ---
 
-## Pipeline Overview
+## Weekly Pipeline (GW32–38, 2025-26)
+
+A new automated weekly pipeline built for the live 2025-26 season (GW32–38). Fully Python — replaces the R lpSolve optimizer with PuLP, and replaces notebook-by-notebook execution with a single CLI.
+
+### How it works
+
+Four scheduled phases per gameweek:
+
+```
+  PRE-DEADLINE              POST-DEADLINE             POST-GW
+  ─────────────             ─────────────             ──────────
+  Fetch bootstrap           (no action)               Fetch live
+  Capture ep_next xP                                  player data
+  Save bootstrap                                      Save gw{N}_live.csv
+  snapshot
+         │                                                  │
+         ▼                                                  ▼
+  PREDICT (run after deadline)              RETRAIN (manual, on-demand)
+  ───────────────────────────               ────────────────────────────
+  Build merged dataset                      Rebuild features on full
+  Engineer features                         historical + live dataset
+  Generate xP predictions                   Retrain Random Forest
+  Filter player availability                Save rf_model_gw{N}.sav
+  Optimize team (PuLP ILP)                  Print MAE vs old model
+  Save xi_gw{N}.csv + squad_gw{N}.csv
+```
+
+**Data layers:**
+
+| Layer | Source | Coverage |
+|-------|--------|----------|
+| Historical base | vaastav `merged_gw.csv` | 2016-17 through 2024-25 (static) |
+| Current season base | vaastav `merged_gw.csv` | 2025-26 GW1–29 (updated ~3x/season) |
+| Current season live | FPL API `element-summary/{id}/` | GW30+ (fetched after each GW) |
+
+Live rows are only used for GWs not already covered in vaastav (dedup prefers vaastav).
+
+**Player availability filtering** uses a decision table (first-match-wins):
+
+| Status | Chance of playing | Action |
+|--------|-------------------|--------|
+| `i`, `u`, `s`, `n` | any | Hard exclude |
+| any | 0% or 25% | Hard exclude |
+| any | 50% | xP × 0.50 |
+| `d` | null | xP × 0.50 |
+| any | 75% | xP × 0.75 |
+| `a` | 100% or null | No change |
+
+### Setup
+
+```bash
+# Python dependencies (includes pytest, PuLP)
+pip install -r requirements.txt
+
+# Clone vaastav dataset (if not already present)
+git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Premier-League
+```
+
+### Running the weekly pipeline
+
+```bash
+# Phase 1: Before each GW deadline — fetch bootstrap and capture xP snapshot
+python -m src.pipeline.run pre-deadline
+
+# Phase 2: After deadline — generate predictions and optimal team
+python -m src.pipeline.run predict --gw 32
+
+# Phase 3: After GW completes — collect actual results and live player data
+python -m src.pipeline.run post-gw
+
+# Phase 4: Retrain model (manual, run when you have enough new data)
+python -m src.pipeline.run retrain --gw 32
+
+# Or run phases 1+2 together
+python -m src.pipeline.run full
+```
+
+The `predict` phase prints the optimal XI directly and saves `results/xi_gw{N}.csv` and `results/squad_gw{N}.csv`.
+
+**Using the cron wrapper (Linux/macOS/WSL):**
+
+```bash
+chmod +x scripts/weekly_run.sh
+./scripts/weekly_run.sh pre-deadline   # logs to logs/pre-deadline_<timestamp>.log
+./scripts/weekly_run.sh predict --gw 32
+```
+
+### GW32–38 Calendar
+
+| GW | Deadline (UTC) |
+|----|----------------|
+| 32 | Apr 10, 2026 17:30 |
+| 33 | Apr 18, 2026 10:00 |
+| 34 | Apr 24, 2026 17:30 |
+| 35 | May 2, 2026 12:30 |
+| 36 | May 9, 2026 12:30 |
+| 37 | May 17, 2026 12:30 |
+| 38 | May 24, 2026 13:30 |
+
+**Pre-GW checklist:**
+1. `python -m src.pipeline.run pre-deadline` — captures xP and bootstrap snapshot
+2. `python -m src.pipeline.run predict --gw <N>` — generates optimal team
+3. Review the XI output — check excluded/scaled players make sense
+4. Make transfers in the FPL app
+5. After GW: `python -m src.pipeline.run post-gw` to collect live results
+
+### Model management
+
+The active model is configured in `src/config.py`:
+
+```python
+ACTIVE_MODEL = MODELS_DIR / "rf_model.sav"
+```
+
+To promote a retrained model:
+1. Run `python -m src.pipeline.run retrain --gw <N>` — saves `models/rf_model_gw<N>.sav` and prints MAE comparison
+2. If the new model is better, update `ACTIVE_MODEL` in `src/config.py`
+
+Without a trained model the pipeline falls back to FPL API `ep_next` values (captured during `pre-deadline`).
+
+### Running tests
+
+```bash
+pytest tests/ -v
+
+# Unit tests only (faster)
+pytest tests/ -v --ignore=tests/test_integration.py
+
+# Integration test (requires vaastav dataset)
+pytest tests/test_integration.py -v -s
+```
+
+---
+
+## Pipeline Overview (Original Notebook-Based System)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐

@@ -39,6 +39,9 @@ Thumbs.db
 # Claude Code
 .claude/
 
+# Gemini CLI
+.gemini/
+
 # IDE
 .idea/
 .vscode/

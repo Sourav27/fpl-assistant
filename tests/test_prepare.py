@@ -111,6 +111,59 @@ class TestAddFixtureDifficulty:
         assert result["fdr_team"].iloc[0] == 3
 
 
+class TestCodeColumn:
+    def test_adds_code_from_players_raw(self, tmp_path):
+        """load_season_gw_data adds a 'code' column from players_raw.csv."""
+        season = "2024-25"
+        vaastav_dir = tmp_path / "FPL"
+        gw_dir = vaastav_dir / "data" / season / "gws"
+        gw_dir.mkdir(parents=True)
+
+        gw_data = pd.DataFrame({"element": [10, 20], "GW": [1, 1], "total_points": [5, 8]})
+        gw_data.to_csv(gw_dir / "merged_gw.csv", index=False)
+
+        raw = pd.DataFrame({"id": [10, 20], "code": [1001, 2002],
+                            "first_name": ["A", "B"], "second_name": ["X", "Y"]})
+        raw.to_csv(vaastav_dir / "data" / season / "players_raw.csv", index=False)
+
+        result = load_season_gw_data(season, vaastav_dir=vaastav_dir)
+        assert "code" in result.columns
+        assert result[result["element"] == 10]["code"].iloc[0] == 1001
+        assert result[result["element"] == 20]["code"].iloc[0] == 2002
+
+    def test_code_falls_back_to_element_when_players_raw_missing(self, tmp_path):
+        """When players_raw.csv absent, code equals element."""
+        season = "2016-17"
+        vaastav_dir = tmp_path / "FPL"
+        gw_dir = vaastav_dir / "data" / season / "gws"
+        gw_dir.mkdir(parents=True)
+
+        gw_data = pd.DataFrame({"element": [7, 8], "GW": [1, 1], "total_points": [3, 6]})
+        gw_data.to_csv(gw_dir / "merged_gw.csv", index=False, encoding="latin-1")
+
+        result = load_season_gw_data(season, vaastav_dir=vaastav_dir)
+        assert "code" in result.columns
+        assert list(result["code"]) == [7, 8]
+
+    def test_build_merged_dataset_includes_code(self, tmp_path):
+        """build_merged_dataset propagates the code column."""
+        season = "2024-25"
+        vaastav_dir = tmp_path / "FPL"
+        gw_dir = vaastav_dir / "data" / season / "gws"
+        gw_dir.mkdir(parents=True)
+
+        gw_data = pd.DataFrame({"element": [5], "GW": [1], "total_points": [10],
+                                 "name": ["Salah"], "position": ["MID"], "team": ["Liverpool"]})
+        gw_data.to_csv(gw_dir / "merged_gw.csv", index=False)
+        raw = pd.DataFrame({"id": [5], "code": [99999],
+                            "first_name": ["Mohamed"], "second_name": ["Salah"]})
+        raw.to_csv(vaastav_dir / "data" / season / "players_raw.csv", index=False)
+
+        result = build_merged_dataset(seasons=[season], vaastav_dir=vaastav_dir)
+        assert "code" in result.columns
+        assert result["code"].iloc[0] == 99999
+
+
 class TestBuildMergedDataset:
     def test_end_to_end_produces_expected_columns(self, tmp_path):
         season_dir = tmp_path / "FPL" / "data" / "2025-26"

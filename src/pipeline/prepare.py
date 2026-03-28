@@ -8,12 +8,31 @@ from src.config import VAASTAV_DIR, SEASONS, CURRENT_SEASON
 LATIN1_SEASONS = {"2016-17", "2017-18", "2018-19"}
 
 
+def _build_code_map(season: str, vaastav_dir: Path) -> dict:
+    """Return {seasonal_element_id: global_player_code} from players_raw.csv.
+
+    FPL's ``code`` field is stable across seasons; ``id`` (element) is recycled
+    each season.  Returns an empty dict when players_raw.csv is absent.
+    """
+    path = vaastav_dir / "data" / season / "players_raw.csv"
+    if not path.exists():
+        return {}
+    raw = pd.read_csv(path, usecols=["id", "code"])
+    return dict(zip(raw["id"], raw["code"]))
+
+
 def load_season_gw_data(season: str, vaastav_dir: Path = VAASTAV_DIR) -> pd.DataFrame:
     """Load merged_gw.csv for a single season."""
     path = vaastav_dir / "data" / season / "gws" / "merged_gw.csv"
     encoding = "latin-1" if season in LATIN1_SEASONS else "utf-8"
     df = pd.read_csv(path, encoding=encoding, low_memory=False)
     df["season"] = season
+
+    # Attach persistent player code so features can group by player across seasons.
+    # Falls back to element when players_raw.csv is absent (older seasons).
+    if "element" in df.columns:
+        code_map = _build_code_map(season, vaastav_dir)
+        df["code"] = df["element"].map(code_map) if code_map else df["element"]
     return df
 
 

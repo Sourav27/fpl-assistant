@@ -24,8 +24,8 @@ def test_squad_rules():
     assert SQUAD_RULES["positions"] == {"GK": 2, "DEF": 5, "MID": 5, "FWD": 3}
 
 def test_active_model_path():
-    assert ACTIVE_MODEL.name == "rf_model.sav"
     assert ACTIVE_MODEL.parent.name == "models"
+    assert ACTIVE_MODEL.suffix == ".sav"
 
 def test_availability_constants():
     assert "i" in AVAILABILITY_HARD_EXCLUDE_STATUS

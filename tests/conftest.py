@@ -12,7 +12,7 @@ def sample_bootstrap_json():
         ],
         "elements": [
             {
-                "id": 1, "first_name": "David", "second_name": "Raya",
+                "id": 1, "code": 10001, "first_name": "David", "second_name": "Raya",
                 "web_name": "Raya", "team": 1, "element_type": 1,
                 "now_cost": 55, "total_points": 120, "minutes": 2700,
                 "ep_this": "4.2", "ep_next": "4.5",
@@ -23,7 +23,7 @@ def sample_bootstrap_json():
                 "expected_goals": "0.0", "expected_assists": "0.1",
             },
             {
-                "id": 2, "first_name": "Gabriel", "second_name": "Magalhaes",
+                "id": 2, "code": 10002, "first_name": "Gabriel", "second_name": "Magalhaes",
                 "web_name": "Gabriel", "team": 1, "element_type": 2,
                 "now_cost": 62, "total_points": 140, "minutes": 2600,
                 "ep_this": "5.1", "ep_next": "5.3",
@@ -34,7 +34,7 @@ def sample_bootstrap_json():
                 "expected_goals": "3.2", "expected_assists": "0.8",
             },
             {
-                "id": 3, "first_name": "Bukayo", "second_name": "Saka",
+                "id": 3, "code": 10003, "first_name": "Bukayo", "second_name": "Saka",
                 "web_name": "Saka", "team": 1, "element_type": 3,
                 "now_cost": 105, "total_points": 180, "minutes": 2400,
                 "ep_this": "6.8", "ep_next": "7.0",
@@ -45,7 +45,7 @@ def sample_bootstrap_json():
                 "expected_goals": "10.5", "expected_assists": "8.2",
             },
             {
-                "id": 4, "first_name": "Martin", "second_name": "Odegaard",
+                "id": 4, "code": 10004, "first_name": "Martin", "second_name": "Odegaard",
                 "web_name": "Odegaard", "team": 1, "element_type": 3,
                 "now_cost": 82, "total_points": 90, "minutes": 1800,
                 "ep_this": "3.5", "ep_next": "3.8",

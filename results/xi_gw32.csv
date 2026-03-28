@@ -1,12 +1,12 @@
-element,name,position,team,xP,now_cost
-72,Asmir_Begovic_72,DEF,Bournemouth,6.0,51.0
-178,Daniel_Amartey_178,FWD,Chelsea,5.5,62.0
-249,Tahith_Chong_249,MID,Fulham,6.7,78.0
-303,David_McGoldrick_303,DEF,Leicester,6.0,52.0
-311,Kayne_Ramsay_311,DEF,Liverpool,6.7,50.0
-329,Ben_Davies_329,MID,Liverpool,6.5,61.0
-387,Alexandre Nascimento_Costa Silva_387,DEF,Man Utd,6.3,70.0
-449,Ralf_Fahrmann_449,MID,Nott'm Forest,11.5,103.0
-485,Wesley_Hoedt_485,MID,Spurs,7.5,74.0
-508,Sofiane_Boufal_508,GK,Spurs,5.2,47.0
-515,Kieran_Tierney_515,MID,Southampton,7.0,74.0
+element,name,position,team,now_cost,xP
+187,Walker,DEF,Burnley,44.0,7.6
+373,Virgil,DEF,Liverpool,63.0,6.47
+449,B.Fernandes,MID,Man Utd,103.0,8.51
+224,Cucurella,DEF,Chelsea,60.0,6.27
+31,G.Jesus,FWD,Arsenal,64.0,7.1
+220,Sánchez,GK,Chelsea,48.0,4.27
+292,Mykolenko,DEF,Everton,49.0,6.59
+82,Semenyo,MID,Man City,82.0,12.04
+452,Amad,MID,Man Utd,62.0,9.37
+169,Gomez,MID,Brighton,49.0,7.08
+163,Hinshelwood,MID,Brighton,51.0,9.81

@@ -22,12 +22,14 @@ def add_rolling_features(
     """
     windows = windows or DEFAULT_WINDOWS
     cols = cols or [c for c in ROLLING_COLS if c in df.columns]
-    df = df.sort_values(["element", "season", "GW"]).copy()
+    # Use persistent player code when available; fall back to seasonal element ID.
+    player_id = "code" if "code" in df.columns else "element"
+    df = df.sort_values([player_id, "season", "GW"]).copy()
 
     for col in cols:
         for w in windows:
             df[f"{col}_roll_{w}"] = (
-                df.groupby("element")[col]
+                df.groupby(player_id)[col]
                 .transform(lambda s: s.shift(1).rolling(w, min_periods=w).mean())
             )
     return df

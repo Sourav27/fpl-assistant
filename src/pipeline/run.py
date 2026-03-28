@@ -103,25 +103,69 @@ def phase_predict(target_gw: int | None = None):
     features = engineer_features(merged)
     print(f"[predict] Features: {len(features)} rows after NaN drop")
 
-    # Get latest row per player for prediction
-    latest = features.sort_values(["element", "GW"]).groupby("element").last().reset_index()
+    # Get latest row per player for prediction.
+    # Group by persistent code when available to avoid element-ID recycling across seasons.
+    player_id = "code" if "code" in features.columns else "element"
+    latest = features.sort_values([player_id, "GW"]).groupby(player_id).last().reset_index()
 
     # Ensure now_cost column exists (vaastav uses 'value', FPL API uses 'now_cost')
     if "now_cost" not in latest.columns:
         latest["now_cost"] = latest.get("value", pd.Series(50, index=latest.index))
 
-    # Load bootstrap for cost override and availability filtering
+    # Load bootstrap for metadata + availability filtering.
     bootstrap = None
     if target_gw:
         bootstrap = _load_cached_bootstrap(target_gw)
-        if bootstrap:
+        if bootstrap and player_id == "code":
+            # Override stale historical metadata (name/position/team/element/cost)
+            # with current-season values from the FPL API bootstrap.
+            elem_type_to_pos = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+            team_map = {t["id"]: t["name"] for t in bootstrap.get("teams", [])}
+            bs_df = pd.DataFrame([{
+                "code": e["code"],
+                "element": e["id"],
+                "name": e["web_name"],
+                "position": elem_type_to_pos.get(e["element_type"], "MID"),
+                "team": team_map.get(e["team"], ""),
+                "now_cost": e["now_cost"],
+            } for e in bootstrap["elements"]])
+            # Drop stale metadata; re-join from bootstrap keyed on persistent code.
+            stale = [c for c in ["element", "name", "position", "team", "now_cost"]
+                     if c in latest.columns]
+            latest = latest.drop(columns=stale).merge(bs_df, on="code", how="left")
+            # Drop players not in current bootstrap (retired / transferred abroad).
+            in_bootstrap = latest["element"].notna()
+            n_excluded = (~in_bootstrap).sum()
+            if n_excluded > 0:
+                print(f"[predict] Excluding {n_excluded} historical players not in current FPL season")
+            latest = latest[in_bootstrap].copy()
+            latest["now_cost"] = latest["now_cost"].fillna(50)
+            latest["position"] = latest["position"].fillna("MID")
+            latest["name"] = latest["name"].fillna("Unknown")
+            latest["team"] = latest["team"].fillna("Unknown")
+            latest["element"] = latest["element"].astype(int)
+        elif bootstrap:
+            # Fallback (no code column): legacy cost-only override by element.
             cost_map = {e["id"]: e["now_cost"] for e in bootstrap["elements"]}
             latest["now_cost"] = latest["element"].map(cost_map).fillna(latest["now_cost"])
 
     print("[predict] Generating predictions...")
     model_path = ACTIVE_MODEL
+    _fallback = False
     if not model_path.exists():
         print(f"[predict] WARNING: Model not found at {model_path}. Using xP from API.")
+        _fallback = True
+    else:
+        try:
+            predictions = predict_next_gw(latest, model_path)
+        except ValueError as e:
+            print(
+                f"[predict] WARNING: Stale model at {model_path} is incompatible "
+                f"({e}). Run `retrain` to rebuild. Falling back to API xP."
+            )
+            _fallback = True
+
+    if _fallback:
         if target_gw:
             xp_path = VAASTAV_DIR / "data" / CURRENT_SEASON / "gws" / f"xP{target_gw}.csv"
             if xp_path.exists():
@@ -134,8 +178,6 @@ def phase_predict(target_gw: int | None = None):
         predictions["xP"] = (latest["xP"] if "xP" in latest.columns else 0)
         predictions["xP"] = predictions["xP"].fillna(0).clip(lower=0)
         predictions["now_cost"] = latest["now_cost"].fillna(50)
-    else:
-        predictions = predict_next_gw(latest, model_path)
 
     # Apply availability filtering
     if bootstrap:

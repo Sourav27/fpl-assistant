@@ -19,7 +19,7 @@ SEASONS = [
 ]
 
 # Model config — user promotes a new model by updating this path
-ACTIVE_MODEL = MODELS_DIR / "rf_model.sav"
+ACTIVE_MODEL = MODELS_DIR / "rf_model_gw31.sav"
 
 SQUAD_RULES = {
     "squad_size": 15,

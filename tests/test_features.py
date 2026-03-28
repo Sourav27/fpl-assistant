@@ -67,6 +67,45 @@ class TestFormFeatures:
         assert result["transfers_net"].iloc[0] == 40000  # 50000 - 10000
 
 
+class TestRollingFeaturesWithCode:
+    def test_uses_code_when_available_to_separate_recycled_elements(self):
+        """Two players sharing element=1 in different seasons must not pollute each other's rolling avg.
+
+        FPL recycles element IDs across seasons.  If we group by element, player B
+        will incorrectly inherit player A's history.  Grouping by code fixes this.
+        """
+        # Player A: element=1 in 2022-23, code=111
+        player_a = pd.DataFrame({
+            "element": [1] * 5, "code": [111] * 5, "season": ["2022-23"] * 5,
+            "GW": [1, 2, 3, 4, 5],
+            "total_points": [10, 10, 10, 10, 10],
+            "minutes": [90] * 5, "ict_index": [5.0] * 5, "bps": [20] * 5,
+            "goals_scored": [1] * 5, "assists": [0] * 5, "clean_sheets": [0] * 5,
+            "influence": [20.0] * 5, "creativity": [10.0] * 5, "threat": [30.0] * 5,
+        })
+        # Player B: element=1 in 2024-25, code=222  (same element, different player)
+        player_b = pd.DataFrame({
+            "element": [1] * 5, "code": [222] * 5, "season": ["2024-25"] * 5,
+            "GW": [1, 2, 3, 4, 5],
+            "total_points": [2, 2, 2, 2, 2],
+            "minutes": [90] * 5, "ict_index": [5.0] * 5, "bps": [20] * 5,
+            "goals_scored": [0] * 5, "assists": [0] * 5, "clean_sheets": [0] * 5,
+            "influence": [20.0] * 5, "creativity": [10.0] * 5, "threat": [30.0] * 5,
+        })
+        df = pd.concat([player_a, player_b], ignore_index=True)
+        result = add_rolling_features(df, windows=[4])
+
+        # Player B GW5 roll_4 should reflect ONLY player B's history (avg=2.0),
+        # not a mix with player A's 10-point history.
+        # At GW1, player B has zero prior GW history → roll_4 must be NaN.
+        # With wrong element-based grouping, player A's 5 GWs bleed in and give 10.0.
+        b_gw1 = result[(result["code"] == 222) & (result["GW"] == 1)].iloc[0]
+        assert pd.isna(b_gw1["total_points_roll_4"]), (
+            "element ID recycling: player B at GW1 should have NaN roll_4 "
+            "(no prior history), but got a value — player A's history leaked in"
+        )
+
+
 class TestEngineerFeatures:
     def test_full_pipeline(self, player_history):
         result = engineer_features(player_history)

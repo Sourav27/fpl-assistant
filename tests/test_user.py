@@ -150,3 +150,35 @@ class TestComputeSellingPrice:
     def test_exact_half_profit(self):
         # bought 100, now 102 → profit 2 → half 1 → sell 101
         assert compute_selling_price(100, 102) == 101
+
+
+class TestFetchGwBenchmarks:
+    def test_returns_benchmark_dict(self, sample_bootstrap_json):
+        from src.pipeline.user import fetch_gw_benchmarks
+        # sample_bootstrap_json has events with ids [29, 30, 31].
+        # Find the event with id=30 by index (index 1 in conftest fixture).
+        # Set values on the event dict directly (mutable).
+        gw30_event = next(e for e in sample_bootstrap_json["events"] if e["id"] == 30)
+        gw30_event["highest_score"] = 109
+        gw30_event["average_entry_score"] = 38
+        gw30_event["ranked_count"] = 12914049
+
+        mock_standings_page = {
+            "standings": {
+                "results": [{"entry": i, "total": 85 - i} for i in range(50)]
+            }
+        }
+
+        with patch("src.pipeline.user._api_get_with_retry") as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = mock_standings_page
+            mock_get.return_value = mock_resp
+            benchmarks = fetch_gw_benchmarks(
+                gw=30,
+                bootstrap_data=sample_bootstrap_json,
+                overall_league_id=314,
+            )
+
+        assert benchmarks["best_score"] == 109
+        assert benchmarks["avg_score"] == 38
+        assert "top_1k_score" in benchmarks

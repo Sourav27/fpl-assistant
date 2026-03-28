@@ -4,6 +4,7 @@ from src.pipeline.analysis import (
     compute_prediction_misses,
     compute_dream_team,
     format_post_match_summary,
+    append_accuracy_log,
 )
 
 
@@ -62,3 +63,34 @@ class TestComputeDreamTeam:
         assert pos_counts.get("DEF", 0) >= 3
         assert pos_counts.get("MID", 0) >= 2
         assert pos_counts.get("FWD", 0) >= 1
+
+
+class TestAppendAccuracyLog:
+    def test_creates_log_on_first_run(self, tmp_path):
+        log_path = tmp_path / "accuracy_log.csv"
+        append_accuracy_log(
+            path=log_path,
+            gw=33,
+            your_pts=58, your_xp=72.3,
+            recommended_pts=65, recommended_xp=78.1,
+            dream_pts=89,
+            your_percentile_rank=20,
+            benchmarks={"best_score": 109, "top_1k_score": 85,
+                        "top_10k_score": 79, "top_100k_score": 73,
+                        "top_1m_score": 62, "avg_score": 38, "median_score": 36},
+            ranked_count=12914049,
+        )
+        df = pd.read_csv(log_path)
+        assert len(df) == 1
+        assert df.iloc[0]["gw"] == 33
+        assert df.iloc[0]["your_pts"] == 58
+
+    def test_appends_to_existing_log(self, tmp_path):
+        log_path = tmp_path / "accuracy_log.csv"
+        kwargs = dict(your_pts=60, your_xp=65.0, recommended_pts=None, recommended_xp=None,
+                      dream_pts=None, your_percentile_rank=None, benchmarks={}, ranked_count=0)
+        append_accuracy_log(log_path, gw=31, **kwargs)
+        append_accuracy_log(log_path, gw=32, **kwargs)
+        df = pd.read_csv(log_path)
+        assert len(df) == 2
+        assert list(df["gw"]) == [31, 32]

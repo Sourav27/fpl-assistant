@@ -27,7 +27,7 @@ from src.pipeline.fetch import (
 )
 from src.pipeline.prepare import build_merged_dataset
 from src.pipeline.features import engineer_features
-from src.pipeline.predict import predict_next_gw, get_feature_columns
+from src.pipeline.predict import predict_next_gw, get_feature_columns, save_full_predictions
 from src.pipeline.availability import filter_availability
 from src.pipeline.optimize import optimize_team
 
@@ -195,6 +195,11 @@ def phase_predict(target_gw: int | None = None):
     # Save results directory
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     gw_label = f"gw{target_gw}" if target_gw else "latest"
+
+    # Save full predictions for recommend + analysis phases
+    pred_path = RESULTS_DIR / f"predictions_{gw_label}.csv"
+    save_full_predictions(predictions, pred_path)
+    print(f"[predict] Saved full predictions ({len(predictions)} players) to {pred_path}")
 
     try:
         result = optimize_team(predictions)

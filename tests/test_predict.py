@@ -76,3 +76,26 @@ class TestPredictNextGW:
         assert "element" in result.columns
         assert len(result) == 50
         assert (result["xP"] >= 0).all()
+
+
+class TestSaveFullPredictionsCSV:
+    def test_save_predictions_creates_file(self, sample_predictions_df, tmp_path):
+        from src.pipeline.predict import save_full_predictions
+        out_path = tmp_path / "predictions_gw33.csv"
+        save_full_predictions(sample_predictions_df, out_path)
+        assert out_path.exists()
+        import pandas as pd
+        df = pd.read_csv(out_path)
+        assert list(df.columns) == ["element", "code", "name", "position", "team", "xP", "now_cost"]
+        assert len(df) == len(sample_predictions_df)
+
+    def test_save_predictions_cost_in_01m_units(self, sample_predictions_df, tmp_path):
+        from src.pipeline.predict import save_full_predictions
+        # now_cost stays in 0.1M units (FPL convention): 105 = £10.5m stored as 105
+        out_path = tmp_path / "predictions_gw33.csv"
+        save_full_predictions(sample_predictions_df, out_path)
+        import pandas as pd
+        df = pd.read_csv(out_path)
+        # Saka: now_cost=105 stays as 105 (0.1M units)
+        saka = df[df["name"] == "Saka"].iloc[0]
+        assert saka["now_cost"] == 105

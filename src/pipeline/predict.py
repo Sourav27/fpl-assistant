@@ -57,3 +57,22 @@ def predict_next_gw(
     result = df[ID_COLUMNS].copy()
     result["xP"] = predictions
     return result
+
+
+def save_full_predictions(predictions: pd.DataFrame, path: Path) -> None:
+    """Save full player predictions to CSV.
+
+    Columns: element, code, name, position, team, xP, now_cost (in 0.1M units, e.g. 105 = £10.5m)
+    now_cost is kept in 0.1M units (FPL API convention) so recommend.py and optimize.py
+    can use it directly without unit conversion. Convert to £ only in user-facing output (CSVs,
+    terminal summaries) by dividing by 10.
+    """
+    df = predictions.copy()
+    # Ensure code column exists (may be absent if model ran without cross-season data)
+    if "code" not in df.columns:
+        df["code"] = df.get("element", pd.Series(dtype=int))
+    # now_cost stays in 0.1M units — do NOT divide by 10 here
+    cols = ["element", "code", "name", "position", "team", "xP", "now_cost"]
+    df = df[[c for c in cols if c in df.columns]]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)

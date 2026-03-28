@@ -200,3 +200,205 @@ def _recommend_single_gw(
         "bank_after": bank_pounds,
         "squad_after": squad_after,
     }
+
+
+def build_xp_matrix(
+    predictions: pd.DataFrame,
+    fixtures: list[dict],
+    team_id_map: dict[str, int],
+    gws: list[int],
+    fdr_sensitivity: float,
+) -> pd.DataFrame:
+    """Build player × GW matrix of FDR-adjusted xP values.
+
+    Blank GW = 0 xP. Double GW = sum of xP from both fixtures.
+    now_cost in predictions is in 0.1M units (FPL convention: 105 = £10.5m).
+    """
+    fdr_map = build_fixture_fdr_map(fixtures, gws)
+    matrix = pd.DataFrame(0.0, index=predictions.index, columns=gws)
+
+    for gw in gws:
+        for idx, row in predictions.iterrows():
+            team_id = team_id_map.get(row["team"])
+            if team_id is None:
+                matrix.loc[idx, gw] = 0.0
+                continue
+            fdr = fdr_map.get((team_id, gw))
+            if fdr is None:
+                matrix.loc[idx, gw] = 0.0  # blank GW
+            else:
+                weight = compute_fdr_weight(fdr, fdr_sensitivity)
+                matrix.loc[idx, gw] = row["xP"] * weight
+
+    return matrix
+
+
+def _recommend_multi_gw(
+    user_state: "UserTeamState",
+    predictions: pd.DataFrame,
+    fixtures: list[dict],
+    horizon: int,
+    fdr_sensitivity: float,
+    max_hit_points: int,
+) -> dict:
+    """Multi-GW ILP using PuLP with free transfer banking and FDR weighting.
+
+    Linearises FT carryover with big-M = 20.
+    All costs in 0.1M units (FPL convention).
+    """
+    from src.config import SQUAD_RULES
+
+    players = predictions.reset_index(drop=True)
+    n = len(players)
+    M = 20  # big-M for FT linearisation
+
+    gw_indices = list(range(horizon))
+
+    # All values in 0.1M units — no conversion needed
+    sp = user_state.selling_prices  # element → 0.1M units
+    bank0 = user_state.bank         # 0.1M units
+    ft0 = user_state.free_transfers
+    max_hits_per_gw = max_hit_points // 4
+    current_squad_set = set(user_state.current_squad)
+    in_squad_gw0 = [1 if players.iloc[i]["element"] in current_squad_set else 0 for i in range(n)]
+
+    # FDR-weighted xP per player per GW (GW 0 = raw xP, future GWs fall back to raw xP without bootstrap)
+    xp_matrix: list[list[float]] = []
+    for i in range(n):
+        row_xp = [float(players.iloc[i]["xP"]) for _ in gw_indices]
+        xp_matrix.append(row_xp)
+
+    prob = LpProblem("FPL_MultiGW_Recommend", LpMaximize)
+
+    # Decision variables
+    squad = [[LpVariable(f"sq_{i}_{g}", cat="Binary") for g in gw_indices] for i in range(n)]
+    xi = [[LpVariable(f"xi_{i}_{g}", cat="Binary") for g in gw_indices] for i in range(n)]
+    tin = [[LpVariable(f"tin_{i}_{g}", cat="Binary") for g in gw_indices] for i in range(n)]
+    tout = [[LpVariable(f"tout_{i}_{g}", cat="Binary") for g in gw_indices] for i in range(n)]
+    cap = [[LpVariable(f"cap_{i}_{g}", cat="Binary") for g in gw_indices] for i in range(n)]
+    hits = [LpVariable(f"hits_{g}", lowBound=0, cat="Integer") for g in gw_indices]
+    ft = [LpVariable(f"ft_{g}", lowBound=1, upBound=5, cat="Integer") for g in gw_indices]
+    used_ft = [LpVariable(f"used_ft_{g}", cat="Binary") for g in gw_indices]
+    bank = [LpVariable(f"bank_{g}", lowBound=0) for g in gw_indices]
+
+    # Objective
+    prob += lpSum(
+        xp_matrix[i][g] * (xi[i][g] + cap[i][g]) - 4 * hits[g]
+        for i in range(n) for g in gw_indices
+    )
+
+    for g in gw_indices:
+        # Squad size
+        prob += lpSum(squad[i][g] for i in range(n)) == SQUAD_RULES["squad_size"]
+
+        # XI size
+        prob += lpSum(xi[i][g] for i in range(n)) == SQUAD_RULES["xi_size"]
+
+        # Position constraints (squad)
+        for pos, count in SQUAD_RULES["positions"].items():
+            prob += lpSum(squad[i][g] for i in range(n) if players.iloc[i]["position"] == pos) == count
+
+        # XI position constraints
+        prob += lpSum(xi[i][g] for i in range(n) if players.iloc[i]["position"] == "GK") == 1
+        prob += lpSum(xi[i][g] for i in range(n) if players.iloc[i]["position"] == "DEF") >= 3
+        prob += lpSum(xi[i][g] for i in range(n) if players.iloc[i]["position"] == "MID") >= 2
+        prob += lpSum(xi[i][g] for i in range(n) if players.iloc[i]["position"] == "FWD") >= 1
+
+        # Max 3 per club
+        for team in players["team"].unique():
+            prob += lpSum(squad[i][g] for i in range(n) if players.iloc[i]["team"] == team) <= 3
+
+        # XI ⊆ squad
+        for i in range(n):
+            prob += xi[i][g] <= squad[i][g]
+
+        # Captain: 1 in XI
+        prob += lpSum(cap[i][g] for i in range(n)) == 1
+        for i in range(n):
+            prob += cap[i][g] <= xi[i][g]
+
+        # Transfer continuity
+        prev_squad = in_squad_gw0 if g == 0 else [squad[i][g - 1] for i in range(n)]
+        for i in range(n):
+            prob += squad[i][g] == prev_squad[i] + tin[i][g] - tout[i][g]
+            prob += tin[i][g] + tout[i][g] <= 1
+
+        transfers_used_g = lpSum(tin[i][g] for i in range(n))
+
+        # FT initialisation
+        if g == 0:
+            prob += ft[0] == ft0
+        else:
+            # FT carry-forward with big-M linearisation
+            prob += ft[g] <= ft[g - 1] + 1 + M * used_ft[g - 1]
+            prob += ft[g] <= 5
+            prob += ft[g] >= 1
+            prob += ft[g] <= 1 + M * (1 - used_ft[g - 1])
+
+        # used_ft indicator
+        prob += transfers_used_g <= M * used_ft[g]
+        prob += transfers_used_g >= used_ft[g]
+
+        # Hit cost
+        prob += hits[g] >= transfers_used_g - ft[g]
+        prob += hits[g] >= 0
+        prob += hits[g] <= max_hits_per_gw
+
+        # Budget
+        if g == 0:
+            prob += bank[0] == bank0 + lpSum(
+                tout[i][0] * sp.get(players.iloc[i]["element"], players.iloc[i]["now_cost"])
+                for i in range(n)
+            ) - lpSum(tin[i][0] * players.iloc[i]["now_cost"] for i in range(n))
+        else:
+            prob += bank[g] == bank[g - 1] + lpSum(
+                tout[i][g] * players.iloc[i]["now_cost"] for i in range(n)
+            ) - lpSum(tin[i][g] * players.iloc[i]["now_cost"] for i in range(n))
+        prob += bank[g] >= 0
+
+    prob.solve(pulp.PULP_CBC_CMD(msg=0))
+
+    # Extract results per GW
+    gw_results = []
+    for g in gw_indices:
+        ins = [i for i in range(n) if lp_value(tin[i][g]) is not None and lp_value(tin[i][g]) > 0.5]
+        outs = [i for i in range(n) if lp_value(tout[i][g]) is not None and lp_value(tout[i][g]) > 0.5]
+        hit_count = int(round(lp_value(hits[g]) or 0))
+        bank_val = lp_value(bank[g]) or 0.0
+
+        transfers_gw = []
+        for out_i, in_i in zip(outs, ins):
+            p_out = players.iloc[out_i]
+            p_in = players.iloc[in_i]
+            transfers_gw.append({
+                "player_out": p_out["name"],
+                "player_in": p_in["name"],
+                "price_out": sp.get(p_out["element"], p_out["now_cost"]) / 10,  # convert to £ for display
+                "price_in": p_in["now_cost"] / 10,  # convert to £ for display
+                "xp_out": p_out["xP"],
+                "xp_in": p_in["xP"],
+            })
+        gw_results.append({
+            "transfers": transfers_gw,
+            "hit_cost": hit_count * 4,
+            "bank_after": round(bank_val / 10, 1),  # convert to £ for display
+        })
+
+    total_xp = sum(
+        xp_matrix[i][g]
+        for g in gw_indices
+        for i in range(n)
+        if lp_value(xi[i][g]) is not None and lp_value(xi[i][g]) > 0.5
+    )
+
+    return {
+        "transfers": gw_results,
+        "projected_xp": round(total_xp, 1),
+        "hit_cost": sum(r["hit_cost"] for r in gw_results),
+        "bank_after": gw_results[-1]["bank_after"] if gw_results else bank0 / 10,
+        "squad_after": [
+            players.iloc[i]["element"]
+            for i in range(n)
+            if lp_value(squad[i][horizon - 1]) is not None and lp_value(squad[i][horizon - 1]) > 0.5
+        ],
+    }

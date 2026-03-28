@@ -152,3 +152,64 @@ class TestRecommendSingleGW:
         # Hit cost must be non-negative multiple of 4
         assert plan["hit_cost"] >= 0
         assert plan["hit_cost"] % 4 == 0
+
+
+class TestRecommendMultiGW:
+    def test_horizon_2_returns_plan(self, sample_user_state, extended_predictions_df):
+        from src.pipeline.recommend import recommend_transfers
+        fixtures = [
+            {"event": 33, "team_h": 1, "team_a": 5, "team_h_difficulty": 2, "team_a_difficulty": 4},
+            {"event": 34, "team_h": 2, "team_a": 1, "team_h_difficulty": 3, "team_a_difficulty": 3},
+        ]
+        plan = recommend_transfers(
+            user_state=sample_user_state,
+            predictions=extended_predictions_df,
+            fixtures=fixtures,
+            horizon=2,
+            fdr_sensitivity=0.15,
+            max_hit_points=8,
+        )
+        assert "transfers" in plan
+        assert isinstance(plan["transfers"], list)
+        # transfers list has one entry per GW
+        assert len(plan["transfers"]) == 2
+
+    def test_blank_gw_player_has_zero_xp(self, sample_user_state, extended_predictions_df):
+        """Players with no fixture in a GW contribute 0 xP for that GW."""
+        from src.pipeline.recommend import build_xp_matrix
+        # Only GW33 has fixtures
+        fixtures = [
+            {"event": 33, "team_h": 1, "team_a": 5,
+             "team_h_difficulty": 2, "team_a_difficulty": 4},
+        ]
+        # Player 1 is on team 1
+        extended_predictions_df = extended_predictions_df.copy()
+        extended_predictions_df.loc[0, "team"] = "Team1"
+        # Team IDs in fixtures use int; we need a team→id map
+        team_id_map = {"Team1": 1, "Team5": 5}
+        xp_matrix = build_xp_matrix(
+            predictions=extended_predictions_df,
+            fixtures=fixtures,
+            team_id_map=team_id_map,
+            gws=[33, 34],
+            fdr_sensitivity=0.15,
+        )
+        # GW34: Team1 has no fixture → xP=0 for Player1
+        player1_gw34_xp = xp_matrix.loc[
+            extended_predictions_df[extended_predictions_df["team"] == "Team1"].index[0], 34
+        ]
+        assert player1_gw34_xp == pytest.approx(0.0)
+
+    def test_hit_cost_not_exceeded(self, sample_user_state, extended_predictions_df):
+        from src.pipeline.recommend import recommend_transfers
+        plan = recommend_transfers(
+            user_state=sample_user_state,
+            predictions=extended_predictions_df,
+            fixtures=[],
+            horizon=3,
+            fdr_sensitivity=0.15,
+            max_hit_points=4,  # max 1 hit per GW
+        )
+        for gw_transfers in plan["transfers"]:
+            hit = gw_transfers.get("hit_cost", 0)
+            assert hit <= 4

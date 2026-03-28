@@ -1,0 +1,1440 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "fpl-assistant",
+    "languages": [
+      "python",
+      "r",
+      "bash"
+    ],
+    "frameworks": [
+      "pulp",
+      "pytest",
+      "scikit-learn",
+      "xgboost"
+    ],
+    "description": "A research project combining machine learning prediction and portfolio optimization to select optimal Fantasy Premier League (FPL) squads.",
+    "analyzedAt": "2026-03-28T12:19:11.526Z",
+    "gitCommitHash": "67ebc10ed9e4003aab2ac48c37fbc985b39433c4"
+  },
+  "nodes": [
+    {
+      "id": "file:tests/test_availability.py",
+      "type": "file",
+      "name": "test_availability.py",
+      "filePath": "tests/test_availability.py",
+      "summary": "Unit tests for player availability filtering logic.",
+      "tags": [
+        "test",
+        "unit-test",
+        "availability"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/pipeline/optimize.py:optimize_team",
+      "type": "function",
+      "name": "optimize_team",
+      "filePath": "src/pipeline/optimize.py",
+      "lineRange": [
+        80,
+        93
+      ],
+      "summary": "Runs the full optimization pipeline from player pool to optimal XI and captain.",
+      "tags": [
+        "optimization",
+        "orchestration"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/optimization/FPLv2.r",
+      "type": "file",
+      "name": "FPLv2.r",
+      "filePath": "src/optimization/FPLv2.r",
+      "summary": "Second version of the optimization script with updated constraints and objective functions.",
+      "tags": [
+        "optimization",
+        "refactoring"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:tests/test_predict.py:TestPredictNextGW",
+      "type": "class",
+      "name": "TestPredictNextGW",
+      "filePath": "tests/test_predict.py",
+      "lineRange": [
+        52,
+        78
+      ],
+      "summary": "Tests for generating point predictions using a trained model.",
+      "tags": [
+        "unit-test",
+        "prediction"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/test_fetch.py",
+      "type": "file",
+      "name": "test_fetch.py",
+      "filePath": "tests/test_fetch.py",
+      "summary": "Tests for the FPL API data fetching and normalization logic.",
+      "tags": [
+        "test",
+        "unit-test",
+        "data-collection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "tests/__init__.py",
+      "summary": "Package initialization for the tests directory.",
+      "tags": [
+        "barrel",
+        "python-package"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/data_collection/collector.py",
+      "type": "file",
+      "name": "collector.py",
+      "filePath": "src/data_collection/collector.py",
+      "summary": "Orchestrates the gathering of weekly FPL data including teams, fixtures, and gameweek-specific statistics.",
+      "tags": [
+        "service",
+        "orchestration",
+        "data-collection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/data_collection/collector.py:collect_gw",
+      "type": "function",
+      "name": "collect_gw",
+      "filePath": "src/data_collection/collector.py",
+      "lineRange": [
+        68,
+        105
+      ],
+      "summary": "Aggregates all relevant data for a specific gameweek into a single merged dataset.",
+      "tags": [
+        "orchestration",
+        "data-collection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/pipeline/run.py:phase_pre_deadline",
+      "type": "function",
+      "name": "phase_pre_deadline",
+      "filePath": "src/pipeline/run.py",
+      "lineRange": [
+        62,
+        93
+      ],
+      "summary": "Executes the pre-deadline phase: data fetching and snapshotting.",
+      "tags": [
+        "pipeline-phase",
+        "data-collection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/data_collection/gameweek.py",
+      "type": "file",
+      "name": "gameweek.py",
+      "filePath": "src/data_collection/gameweek.py",
+      "summary": "Utility to determine the current or most recent completed gameweek ID.",
+      "tags": [
+        "utility",
+        "api-client"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:tests/test_optimize.py:TestSelectSquad",
+      "type": "class",
+      "name": "TestSelectSquad",
+      "filePath": "tests/test_optimize.py",
+      "lineRange": [
+        48,
+        73
+      ],
+      "summary": "Tests for the 15-player squad selection LP optimization.",
+      "tags": [
+        "unit-test",
+        "optimization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/pipeline/optimize.py",
+      "type": "file",
+      "name": "optimize.py",
+      "filePath": "src/pipeline/optimize.py",
+      "summary": "Implements team selection logic and optimization for FPL squads and starting XIs.",
+      "tags": [
+        "optimization",
+        "team-selection",
+        "linear-programming"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/data_collection/fbref.py:get_epl_players",
+      "type": "function",
+      "name": "get_epl_players",
+      "filePath": "src/data_collection/fbref.py",
+      "lineRange": [
+        88,
+        141
+      ],
+      "summary": "Scrapes EPL player lists and basic info from FBRef overview pages.",
+      "tags": [
+        "scraping",
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/data_collection/cleaners.py",
+      "type": "file",
+      "name": "cleaners.py",
+      "filePath": "src/data_collection/cleaners.py",
+      "summary": "Utility functions for cleaning player data and mapping player IDs between different sources.",
+      "tags": [
+        "utility",
+        "data-cleaning",
+        "pre-processing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/data_collection/utility.py",
+      "type": "file",
+      "name": "utility.py",
+      "filePath": "src/data_collection/utility.py",
+      "summary": "Common utility functions like unicode-safe printing for data collection tasks.",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/optimization/Covariance_TotalPoints.R",
+      "type": "file",
+      "name": "Covariance_TotalPoints.R",
+      "filePath": "src/optimization/Covariance_TotalPoints.R",
+      "summary": "R script to calculate the covariance matrix of player points for risk-aware optimization.",
+      "tags": [
+        "data-processing",
+        "statistics",
+        "optimization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/pipeline/run.py:phase_retrain",
+      "type": "function",
+      "name": "phase_retrain",
+      "filePath": "src/pipeline/run.py",
+      "lineRange": [
+        219,
+        265
+      ],
+      "summary": "Orchestrates model retraining on the updated dataset.",
+      "tags": [
+        "pipeline-phase",
+        "model-training"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/test_predict.py",
+      "type": "file",
+      "name": "test_predict.py",
+      "filePath": "tests/test_predict.py",
+      "summary": "Tests for the prediction logic, including model loading and inference.",
+      "tags": [
+        "test",
+        "unit-test",
+        "prediction"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:tests/test_features.py:TestRollingFeatures",
+      "type": "class",
+      "name": "TestRollingFeatures",
+      "filePath": "tests/test_features.py",
+      "lineRange": [
+        37,
+        53
+      ],
+      "summary": "Tests for rolling average feature calculation.",
+      "tags": [
+        "unit-test",
+        "feature-engineering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/pipeline/prepare.py:build_merged_dataset",
+      "type": "function",
+      "name": "build_merged_dataset",
+      "filePath": "src/pipeline/prepare.py",
+      "lineRange": [
+        49,
+        82
+      ],
+      "summary": "Constructs the full historical dataset by merging multiple seasons and adding fixture metadata.",
+      "tags": [
+        "data-merging",
+        "dataset-building"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/optimization/FPL_xP.r",
+      "type": "file",
+      "name": "FPL_xP.r",
+      "filePath": "src/optimization/FPL_xP.r",
+      "summary": "Squad optimization focused primarily on maximizing pure expected points (xP).",
+      "tags": [
+        "optimization",
+        "predictive-analytics"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/pipeline/features.py:add_rolling_features",
+      "type": "function",
+      "name": "add_rolling_features",
+      "filePath": "src/pipeline/features.py",
+      "lineRange": [
+        14,
+        33
+      ],
+      "summary": "Calculates rolling averages for specified columns over multiple time windows.",
+      "tags": [
+        "feature-engineering",
+        "rolling-average"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:tests/test_fetch.py:TestFetchBootstrap",
+      "type": "class",
+      "name": "TestFetchBootstrap",
+      "filePath": "tests/test_fetch.py",
+      "lineRange": [
+        17,
+        38
+      ],
+      "summary": "Tests for fetching FPL API bootstrap-static data with retries.",
+      "tags": [
+        "unit-test",
+        "api-client"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/config.py",
+      "type": "file",
+      "name": "config.py",
+      "filePath": "src/config.py",
+      "summary": "Central configuration module defining file paths, season parameters, and data directories.",
+      "tags": [
+        "config",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/pipeline/availability.py",
+      "type": "file",
+      "name": "availability.py",
+      "filePath": "src/pipeline/availability.py",
+      "summary": "Filters player predictions based on current injury and suspension status from the FPL API.",
+      "tags": [
+        "utility",
+        "filtering",
+        "pipeline"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/data_collection/mergers.py",
+      "type": "file",
+      "name": "mergers.py",
+      "filePath": "src/data_collection/mergers.py",
+      "summary": "Logic for merging gameweek datasets and enhancing them with Fixture Difficulty Rating (FDR) data.",
+      "tags": [
+        "data-processing",
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/pipeline/optimize.py:select_xi",
+      "type": "function",
+      "name": "select_xi",
+      "filePath": "src/pipeline/optimize.py",
+      "lineRange": [
+        39,
+        71
+      ],
+      "summary": "Selects the best starting XI from a 15-player squad based on expected points and formation rules.",
+      "tags": [
+        "optimization",
+        "team-selection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/test_prepare.py",
+      "type": "file",
+      "name": "test_prepare.py",
+      "filePath": "tests/test_prepare.py",
+      "summary": "Unit tests for the data preparation and dataset building logic.",
+      "tags": [
+        "test",
+        "unit-test",
+        "data-preparation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/pipeline/features.py",
+      "type": "file",
+      "name": "features.py",
+      "filePath": "src/pipeline/features.py",
+      "summary": "Handles feature engineering for FPL data, including rolling averages, momentum, and form-based features.",
+      "tags": [
+        "feature-engineering",
+        "data-processing",
+        "pipeline"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/data_collection/getters.py",
+      "type": "file",
+      "name": "getters.py",
+      "filePath": "src/data_collection/getters.py",
+      "summary": "Module for fetching raw JSON data from various FPL API endpoints.",
+      "tags": [
+        "service",
+        "api-client",
+        "data-collection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/__init__.py",
+      "summary": "Package initialization for the src directory.",
+      "tags": [
+        "barrel",
+        "python-package"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/test_run.py",
+      "type": "file",
+      "name": "test_run.py",
+      "filePath": "tests/test_run.py",
+      "summary": "Tests for the main pipeline execution phases.",
+      "tags": [
+        "test",
+        "unit-test",
+        "pipeline"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:tests/test_availability.py:TestFilterAvailability",
+      "type": "class",
+      "name": "TestFilterAvailability",
+      "filePath": "tests/test_availability.py",
+      "lineRange": [
+        36,
+        86
+      ],
+      "summary": "Test suite for the filter_availability function, covering various status and news codes.",
+      "tags": [
+        "unit-test",
+        "availability"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/optimization/xMin.R",
+      "type": "file",
+      "name": "xMin.R",
+      "filePath": "src/optimization/xMin.R",
+      "summary": "R script to estimate expected player minutes based on historical playing time patterns.",
+      "tags": [
+        "data-processing",
+        "predictive-analytics"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/pipeline/fetch.py",
+      "type": "file",
+      "name": "fetch.py",
+      "filePath": "src/pipeline/fetch.py",
+      "summary": "Provides functions to fetch data from the FPL API and normalize it into a consistent format.",
+      "tags": [
+        "data-collection",
+        "api-client",
+        "normalization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:tests/test_run.py:TestPhasePredict",
+      "type": "class",
+      "name": "TestPhasePredict",
+      "filePath": "tests/test_run.py",
+      "lineRange": [
+        65,
+        103
+      ],
+      "summary": "Tests for the prediction and optimization phase of the pipeline.",
+      "tags": [
+        "unit-test",
+        "pipeline"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/data_collection/getters.py:get_individual_player_data",
+      "type": "function",
+      "name": "get_individual_player_data",
+      "filePath": "src/data_collection/getters.py",
+      "lineRange": [
+        15,
+        32
+      ],
+      "summary": "Fetches detailed history and upcoming fixtures for a specific player ID.",
+      "tags": [
+        "api-client",
+        "service"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/pipeline/predict.py:predict_next_gw",
+      "type": "function",
+      "name": "predict_next_gw",
+      "filePath": "src/pipeline/predict.py",
+      "lineRange": [
+        38,
+        59
+      ],
+      "summary": "Generates expected points (xP) predictions for the next gameweek using a trained model.",
+      "tags": [
+        "prediction",
+        "inference"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/pipeline/fetch.py:normalize_player_gw_to_vaastav",
+      "type": "function",
+      "name": "normalize_player_gw_to_vaastav",
+      "filePath": "src/pipeline/fetch.py",
+      "lineRange": [
+        88,
+        140
+      ],
+      "summary": "Maps FPL API player gameweek data to the schema used by the Vaastav dataset.",
+      "tags": [
+        "data-mapping",
+        "normalization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/data_collection/fbref.py",
+      "type": "file",
+      "name": "fbref.py",
+      "filePath": "src/data_collection/fbref.py",
+      "summary": "Scraping module to extract player and match statistics from FBRef website.",
+      "tags": [
+        "service",
+        "scraping",
+        "external-data"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/data_collection/understat.py",
+      "type": "file",
+      "name": "understat.py",
+      "filePath": "src/data_collection/understat.py",
+      "summary": "Scraping module to extract expected stats (xG, xA) from Understat.",
+      "tags": [
+        "service",
+        "scraping",
+        "external-data"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/pipeline/fetch.py:fetch_bootstrap",
+      "type": "function",
+      "name": "fetch_bootstrap",
+      "filePath": "src/pipeline/fetch.py",
+      "lineRange": [
+        36,
+        38
+      ],
+      "summary": "Fetches the static bootstrap data from the FPL API.",
+      "tags": [
+        "api-client",
+        "data-fetch"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/pipeline/optimize.py:select_squad",
+      "type": "function",
+      "name": "select_squad",
+      "filePath": "src/pipeline/optimize.py",
+      "lineRange": [
+        9,
+        36
+      ],
+      "summary": "Selects the optimal 15-player squad subject to budget and team constraints.",
+      "tags": [
+        "optimization",
+        "squad-selection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/data_collection/mergers.py:add_fdr_data",
+      "type": "function",
+      "name": "add_fdr_data",
+      "filePath": "src/data_collection/mergers.py",
+      "lineRange": [
+        62,
+        80
+      ],
+      "summary": "Annotates player dataframes with opponent team names and their difficulty ratings.",
+      "tags": [
+        "data-processing",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/pipeline/run.py:phase_predict",
+      "type": "function",
+      "name": "phase_predict",
+      "filePath": "src/pipeline/run.py",
+      "lineRange": [
+        96,
+        181
+      ],
+      "summary": "Executes the prediction phase: feature building, inference, and optimization.",
+      "tags": [
+        "pipeline-phase",
+        "prediction",
+        "optimization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:scripts/weekly_run.sh",
+      "type": "file",
+      "name": "weekly_run.sh",
+      "filePath": "scripts/weekly_run.sh",
+      "summary": "Bash script to execute the complete weekly FPL pipeline including data collection, prediction, and optimization.",
+      "tags": [
+        "entry-point",
+        "pipeline",
+        "automation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/pipeline/prepare.py",
+      "type": "file",
+      "name": "prepare.py",
+      "filePath": "src/pipeline/prepare.py",
+      "summary": "Prepares the dataset by merging historical and live gameweek data with fixture difficulty information.",
+      "tags": [
+        "data-preparation",
+        "etl",
+        "dataset-building"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/pipeline/run.py:phase_post_gw",
+      "type": "function",
+      "name": "phase_post_gw",
+      "filePath": "src/pipeline/run.py",
+      "lineRange": [
+        184,
+        216
+      ],
+      "summary": "Executes the post-gameweek phase: result collection and live data patching.",
+      "tags": [
+        "pipeline-phase",
+        "data-collection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/data_collection/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/data_collection/__init__.py",
+      "summary": "Package initialization for the data collection module.",
+      "tags": [
+        "barrel",
+        "python-package"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/data_collection/parsers.py",
+      "type": "file",
+      "name": "parsers.py",
+      "filePath": "src/data_collection/parsers.py",
+      "summary": "Functions to parse complex nested JSON from FPL API into flat CSV formats.",
+      "tags": [
+        "data-processing",
+        "serialization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/pipeline/fetch.py:fetch_live_gw_data",
+      "type": "function",
+      "name": "fetch_live_gw_data",
+      "filePath": "src/pipeline/fetch.py",
+      "lineRange": [
+        143,
+        179
+      ],
+      "summary": "Fetches live gameweek performance data for all players.",
+      "tags": [
+        "api-client",
+        "data-fetch"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/conftest.py",
+      "type": "file",
+      "name": "conftest.py",
+      "filePath": "tests/conftest.py",
+      "summary": "Provides shared pytest fixtures and sample data for the project's test suite.",
+      "tags": [
+        "test-configuration",
+        "fixtures",
+        "testing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/test_config.py",
+      "type": "file",
+      "name": "test_config.py",
+      "filePath": "tests/test_config.py",
+      "summary": "Unit tests for project configuration settings and constants.",
+      "tags": [
+        "test",
+        "unit-test",
+        "config"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/pipeline/predict.py",
+      "type": "file",
+      "name": "predict.py",
+      "filePath": "src/pipeline/predict.py",
+      "summary": "Manages model loading and generating point predictions for the next gameweek.",
+      "tags": [
+        "machine-learning",
+        "prediction",
+        "inference"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/pipeline/features.py:engineer_features",
+      "type": "function",
+      "name": "engineer_features",
+      "filePath": "src/pipeline/features.py",
+      "lineRange": [
+        53,
+        64
+      ],
+      "summary": "Orchestrates the full feature engineering pipeline for a given DataFrame.",
+      "tags": [
+        "feature-engineering",
+        "orchestration"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/test_integration.py",
+      "type": "file",
+      "name": "test_integration.py",
+      "filePath": "tests/test_integration.py",
+      "summary": "End-to-end integration tests for the full FPL pipeline.",
+      "tags": [
+        "test",
+        "integration-test",
+        "pipeline"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/pipeline/run.py",
+      "type": "file",
+      "name": "run.py",
+      "filePath": "src/pipeline/run.py",
+      "summary": "Main execution script that orchestrates the different phases of the FPL pipeline.",
+      "tags": [
+        "entry-point",
+        "orchestration",
+        "cli"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:src/optimization/FPL_Sharpe.r",
+      "type": "file",
+      "name": "FPL_Sharpe.r",
+      "filePath": "src/optimization/FPL_Sharpe.r",
+      "summary": "Variant of squad optimization that maximizes the Sharpe Ratio of expected points vs risk.",
+      "tags": [
+        "optimization",
+        "statistics",
+        "portfolio-theory"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:tests/test_prepare.py:TestBuildMergedDataset",
+      "type": "class",
+      "name": "TestBuildMergedDataset",
+      "filePath": "tests/test_prepare.py",
+      "lineRange": [
+        114,
+        149
+      ],
+      "summary": "Tests for the end-to-end dataset construction pipeline.",
+      "tags": [
+        "unit-test",
+        "dataset-building"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/data_collection/cleaners.py:clean_players",
+      "type": "function",
+      "name": "clean_players",
+      "filePath": "src/data_collection/cleaners.py",
+      "lineRange": [
+        5,
+        30
+      ],
+      "summary": "Cleans raw player CSV files by formatting names and handling missing values.",
+      "tags": [
+        "data-cleaning",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/pipeline/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/pipeline/__init__.py",
+      "summary": "Package initialization for the pipeline module.",
+      "tags": [
+        "barrel",
+        "python-package"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/optimization/FPL.R",
+      "type": "file",
+      "name": "FPL.R",
+      "filePath": "src/optimization/FPL.R",
+      "summary": "Core R script using integer linear programming to select an optimal FPL squad based on constraints.",
+      "tags": [
+        "optimization",
+        "integer-programming",
+        "service"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/pipeline/availability.py:filter_availability",
+      "type": "function",
+      "name": "filter_availability",
+      "filePath": "src/pipeline/availability.py",
+      "lineRange": [
+        14,
+        81
+      ],
+      "summary": "Applies availability filters to predictions by checking status codes (e.g., 'i', 's', 'd').",
+      "tags": [
+        "utility",
+        "filtering"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/data_collection/understat.py:match_ids",
+      "type": "function",
+      "name": "match_ids",
+      "filePath": "src/data_collection/understat.py",
+      "lineRange": [
+        90,
+        121
+      ],
+      "summary": "Matches player IDs between Understat and FPL datasets using fuzzy name matching.",
+      "tags": [
+        "data-processing",
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/test_optimize.py",
+      "type": "file",
+      "name": "test_optimize.py",
+      "filePath": "tests/test_optimize.py",
+      "summary": "Unit tests for the team optimization and selection algorithms.",
+      "tags": [
+        "test",
+        "unit-test",
+        "optimization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/test_features.py",
+      "type": "file",
+      "name": "test_features.py",
+      "filePath": "tests/test_features.py",
+      "summary": "Unit tests for the feature engineering logic in the pipeline.",
+      "tags": [
+        "test",
+        "unit-test",
+        "feature-engineering"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/data_collection/parsers.py:parse_players",
+      "type": "function",
+      "name": "parse_players",
+      "filePath": "src/data_collection/parsers.py",
+      "lineRange": [
+        34,
+        42
+      ],
+      "summary": "Parses player overview data from API response into a structured CSV file.",
+      "tags": [
+        "data-processing",
+        "serialization"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/optimization/FPL.R",
+      "target": "file:src/optimization/xMin.R",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/test_predict.py",
+      "target": "class:tests/test_predict.py:TestPredictNextGW",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/optimize.py",
+      "target": "function:src/pipeline/optimize.py:select_squad",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_optimize.py",
+      "target": "class:tests/test_optimize.py:TestSelectSquad",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "function:src/pipeline/run.py:phase_retrain",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/data_collection/getters.py",
+      "target": "function:src/data_collection/getters.py:get_individual_player_data",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/optimize.py",
+      "target": "function:src/pipeline/optimize.py:select_xi",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "file:tests/test_run.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/pipeline/fetch.py",
+      "target": "function:src/pipeline/fetch.py:fetch_live_gw_data",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "function:src/pipeline/run.py:phase_predict",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/prepare.py",
+      "target": "file:tests/test_prepare.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/pipeline/availability.py",
+      "target": "function:src/pipeline/availability.py:filter_availability",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_prepare.py",
+      "target": "class:tests/test_prepare.py:TestBuildMergedDataset",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/fetch.py",
+      "target": "function:src/pipeline/fetch.py:normalize_player_gw_to_vaastav",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "file:src/pipeline/prepare.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/data_collection/collector.py",
+      "target": "file:src/data_collection/getters.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/pipeline/features.py",
+      "target": "file:tests/test_features.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:scripts/weekly_run.sh",
+      "target": "file:src/data_collection/collector.py",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_availability.py",
+      "target": "class:tests/test_availability.py:TestFilterAvailability",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/features.py",
+      "target": "function:src/pipeline/features.py:add_rolling_features",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/data_collection/parsers.py",
+      "target": "function:src/data_collection/parsers.py:parse_players",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/optimization/FPL_Sharpe.r",
+      "target": "file:src/optimization/Covariance_TotalPoints.R",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/data_collection/cleaners.py",
+      "target": "function:src/data_collection/cleaners.py:clean_players",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "function:src/pipeline/run.py:phase_pre_deadline",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/predict.py",
+      "target": "function:src/pipeline/predict.py:predict_next_gw",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_fetch.py",
+      "target": "class:tests/test_fetch.py:TestFetchBootstrap",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/fetch.py",
+      "target": "file:tests/test_fetch.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/data_collection/fbref.py",
+      "target": "function:src/data_collection/fbref.py:get_epl_players",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/predict.py",
+      "target": "file:tests/test_predict.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/pipeline/prepare.py",
+      "target": "function:src/pipeline/prepare.py:build_merged_dataset",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_run.py",
+      "target": "class:tests/test_run.py:TestPhasePredict",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "file:src/pipeline/predict.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/pipeline/fetch.py",
+      "target": "function:src/pipeline/fetch.py:fetch_bootstrap",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/data_collection/understat.py",
+      "target": "function:src/data_collection/understat.py:match_ids",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/features.py",
+      "target": "function:src/pipeline/features.py:add_rolling_features",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/data_collection/collector.py",
+      "target": "function:src/data_collection/collector.py:collect_gw",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/features.py",
+      "target": "function:src/pipeline/features.py:engineer_features",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "file:src/pipeline/optimize.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/data_collection/mergers.py",
+      "target": "function:src/data_collection/mergers.py:add_fdr_data",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "function:src/pipeline/run.py:phase_post_gw",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "file:src/pipeline/features.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/pipeline/optimize.py",
+      "target": "file:tests/test_optimize.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/pipeline/features.py",
+      "target": "function:src/pipeline/features.py:engineer_features",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/pipeline/run.py",
+      "target": "file:src/pipeline/fetch.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/data_collection/collector.py",
+      "target": "file:src/data_collection/parsers.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/pipeline/optimize.py",
+      "target": "function:src/pipeline/optimize.py:optimize_team",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_features.py",
+      "target": "class:tests/test_features.py:TestRollingFeatures",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:data-collection",
+      "name": "Data Collection Layer",
+      "description": "Responsible for fetching raw data from FPL API, FBRef, and Understat, and performing initial cleaning and parsing.",
+      "nodeIds": [
+        "file:src/data_collection/collector.py",
+        "file:src/data_collection/gameweek.py",
+        "file:src/data_collection/cleaners.py",
+        "file:src/data_collection/utility.py",
+        "file:src/data_collection/mergers.py",
+        "file:src/data_collection/getters.py",
+        "file:src/data_collection/fbref.py",
+        "file:src/data_collection/understat.py",
+        "file:src/data_collection/__init__.py",
+        "file:src/data_collection/parsers.py"
+      ]
+    },
+    {
+      "id": "layer:optimization",
+      "name": "Optimization Layer",
+      "description": "Contains the mathematical optimization logic, including R scripts for linear programming and minutes estimation.",
+      "nodeIds": [
+        "file:src/optimization/FPLv2.r",
+        "file:src/optimization/Covariance_TotalPoints.R",
+        "file:src/optimization/FPL_xP.r",
+        "file:src/optimization/xMin.R",
+        "file:src/optimization/FPL_Sharpe.r",
+        "file:src/optimization/FPL.R"
+      ]
+    },
+    {
+      "id": "layer:pipeline",
+      "name": "Pipeline Layer",
+      "description": "Orchestrates the end-to-end workflow, including data preparation, feature engineering, model inference, and team selection.",
+      "nodeIds": [
+        "file:src/pipeline/optimize.py",
+        "file:src/pipeline/availability.py",
+        "file:src/pipeline/features.py",
+        "file:src/pipeline/fetch.py",
+        "file:src/pipeline/prepare.py",
+        "file:src/pipeline/predict.py",
+        "file:src/pipeline/run.py",
+        "file:src/pipeline/__init__.py",
+        "file:src/config.py",
+        "file:src/__init__.py"
+      ]
+    },
+    {
+      "id": "layer:testing",
+      "name": "Testing Layer",
+      "description": "Provides comprehensive test coverage for the pipeline, data collection, and optimization modules.",
+      "nodeIds": [
+        "file:tests/test_availability.py",
+        "file:tests/test_fetch.py",
+        "file:tests/__init__.py",
+        "file:tests/test_predict.py",
+        "file:tests/test_prepare.py",
+        "file:tests/test_run.py",
+        "file:tests/conftest.py",
+        "file:tests/test_config.py",
+        "file:tests/test_integration.py",
+        "file:tests/test_optimize.py",
+        "file:tests/test_features.py"
+      ]
+    },
+    {
+      "id": "layer:infrastructure",
+      "name": "Infrastructure Layer",
+      "description": "Entry point scripts and automation tools for running the weekly pipeline.",
+      "nodeIds": [
+        "file:scripts/weekly_run.sh"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Pipeline Orchestration",
+      "description": "Start at src/pipeline/run.py, the central command hub of the FPL assistant. This script orchestrates the four key phases of the weekly pipeline: data collection, prediction, optimization, and post-gameweek updates using a clean CLI interface.",
+      "nodeIds": [
+        "file:src/pipeline/run.py"
+      ],
+      "languageLesson": "Python's argparse module is used here to create a robust CLI, allowing users to trigger specific phases of the research pipeline like 'predict' or 'retrain'."
+    },
+    {
+      "order": 2,
+      "title": "Infrastructure & Automation",
+      "description": "The scripts/weekly_run.sh bash script provides a unified wrapper for the Python pipeline. It demonstrates how the research project is operationalized for regular, scheduled execution, including logging and environment setup.",
+      "nodeIds": [
+        "file:scripts/weekly_run.sh"
+      ],
+      "languageLesson": "Bash scripting is used here to provide a simple, high-level interface for complex Python execution, a common pattern in data engineering for automation."
+    },
+    {
+      "order": 3,
+      "title": "Data Collection & API Integration",
+      "description": "The foundation begins with data collection. collector.py manages the high-level gathering of weekly statistics, while fetch.py handles the technical details of communicating with the official FPL API and normalizing results into a consistent format.",
+      "nodeIds": [
+        "file:src/data_collection/collector.py",
+        "file:src/pipeline/fetch.py"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "Feature Engineering & Data Prep",
+      "description": "Transforming raw data into predictive signals happens in this stage. prepare.py merges historical datasets with live data, while features.py implements the core logic for calculating rolling averages and form-based metrics that drive the machine learning models.",
+      "nodeIds": [
+        "file:src/pipeline/prepare.py",
+        "file:src/pipeline/features.py"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "Point Prediction Engine",
+      "description": "The machine learning core lives in predict.py. This module loads trained Random Forest or XGBoost models to generate expected points (xP) for the next gameweek, serving as the critical input for the subsequent optimization phase.",
+      "nodeIds": [
+        "file:src/pipeline/predict.py"
+      ],
+      "languageLesson": "The pipeline uses scikit-learn compatible models (Random Forest, XGBoost). Notice how model files (.sav) are loaded during the inference phase to generate real-time predictions."
+    },
+    {
+      "order": 6,
+      "title": "Squad Optimization",
+      "description": "Selecting the winning team under budget constraints involves sophisticated mathematical optimization. This project showcases an evolution from R-based integer linear programming in FPL.R to a modern Python-based approach using the PuLP library in optimize.py.",
+      "nodeIds": [
+        "file:src/optimization/FPL.R",
+        "file:src/pipeline/optimize.py"
+      ],
+      "languageLesson": "R's lpSolve and Python's PuLP provide different ways to express the same FPL constraints (e.g., maximum 3 players per team) as an Integer Linear Programming problem."
+    },
+    {
+      "order": 7,
+      "title": "Quality Assurance & Testing",
+      "description": "To ensure research reliability, the testing infrastructure provides comprehensive coverage. test_run.py validates individual pipeline phases, while test_integration.py ensures the end-to-end flow from data fetch to team selection is correct.",
+      "nodeIds": [
+        "file:tests/test_run.py",
+        "file:tests/test_integration.py"
+      ]
+    }
+  ]
+}

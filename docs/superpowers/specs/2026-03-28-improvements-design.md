@@ -165,14 +165,17 @@ that requires linearisation:
 used_ft[gw] ∈ {0, 1}
 transfers_used[gw] <= M * used_ft[gw]               (if transfers=0 then used_ft=0)
 transfers_used[gw] >= used_ft[gw]                    (if transfers>0 then used_ft=1)
-ft[gw+1] >= ft[gw] + 1 - M * used_ft[gw]            (carry forward if unused)
-ft[gw+1] <= ft[gw] + 1 + M * used_ft[gw]            (carry forward if unused)
+ft[gw+1] <= ft[gw] + 1 + M * used_ft[gw]            (upper bound: grow by at most 1 when unused)
+ft[gw+1] <= 5                                        (hard cap — prevents infeasibility at ft=5)
 ft[gw+1] >= 1                                        (minimum 1 after using transfers)
 ft[gw+1] <= 1 + M * (1 - used_ft[gw])               (reset to 1 if used)
-ft[gw] <= 5                                          (hard cap)
 ft[0] = team_state.free_transfers                    (initial state from API)
 ```
 Where `M = 20` (maximum transfers per GW per FPL rules).
+
+Note: no lower-bound on `ft[gw+1]` when unused — the solver naturally maximises `ft`
+(more free transfers = fewer future hits in the objective). This avoids infeasibility
+when `ft[gw] = 5` where a lower bound would force `ft[gw+1] = 6 > 5`.
 
 **Blank and Double Gameweeks:**
 Players with no fixture in a future GW (blank GW) get `xP = 0` for that week.

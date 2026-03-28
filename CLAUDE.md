@@ -25,6 +25,7 @@ fpl-assistant/
 │   └── Fantasy-Premier-League/  # vaastav dataset — clone separately (see Data Setup)
 ├── docs/
 │   ├── fpl-rules.md             # Full FPL constraint reference (scoring, transfers, chips)
+│   ├── glossary.md              # All pipeline variables: identity, FDR, features, optimizer, config
 │   ├── improvements-roadmap.md  # P1-P5 roadmap with research insights
 │   └── superpowers/specs/       # Implementation specs for improvements
 ├── src/
@@ -141,6 +142,7 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 - **Stale models**: `rf_model.sav` (original notebooks) has 117 features with old naming (`1_assists` etc). Current pipeline uses 18 features (`assists_roll_4` etc). After cloning, run `retrain` before `predict` or the pipeline falls back to API xP.
 - **models/ is git-ignored**: `.sav` files must be regenerated. After cloning, run `python -m src.pipeline.run retrain --gw <latest>`.
 - **Bootstrap cache**: `results/snapshots/bootstrap_gw<N>.json` is used if < 48h old. Delete it to force a fresh API fetch.
+- **FDR column naming**: Despite sounding symmetric, `fdr_team` and `fdr_opp` are NOT interchangeable for xP weighting. `fdr_team` = how hard the fixture is FOR the player's team (spans 1–5, use this). `fdr_opp` = how hard the fixture is for the opponent (reflects the player's own team quality — near-constant 4–5 for elite teams like Arsenal all season, giving no signal). Always use `fdr_team` in `fdr_weight = 1.0 - fdr_sensitivity × (fdr_team − 3) / 2`. See `docs/glossary.md`.
 - **Windows junction for data**: If using git worktrees, `data/Fantasy-Premier-League` is not copied. Create a directory junction: `mklink /J .worktrees/<branch>/data/Fantasy-Premier-League data/Fantasy-Premier-League`.
 
 ---

@@ -61,6 +61,30 @@ Ranked by Random Forest mean decrease in impurity:
 
 ---
 
+## Implemented Features (Track A — 2026-03-29)
+
+The following pipeline extensions were implemented as part of the Track A plan:
+
+**P1 — User Team Sync & Transfer Recommendations** (`src/pipeline/user.py`, `src/pipeline/recommend.py`)
+- `UserTeamState` dataclass + `fetch_user_team_state()` — reads real FPL squad, bank, FTs, chip from the public API
+- `recommend_transfers()` — single-GW and multi-GW ILP transfer planner with FDR weighting, hit cost, and FT banking
+- `recommend_wildcard()` — unconstrained squad rebuild using total squad value as budget (wildcard/free hit)
+- `phase_recommend` CLI phase — `python -m src.pipeline.run recommend --gw N --horizon 3 --wildcard`
+- `save_full_predictions()` in `predict.py` — saves `results/predictions_gw{N}.csv` for downstream use
+
+**P2a — Post-Match Analysis** (`src/pipeline/analysis.py`, extensions to `run.py`)
+- `compute_prediction_misses()` — identifies biggest over/underperformers vs xP predictions
+- `compute_dream_team()` — derives optimal XI from live GW scores for benchmarking
+- `append_accuracy_log()` — season-long CSV log at `results/accuracy_log.csv`
+- `fetch_gw_benchmarks()` — fetches best/avg/top-1k/top-10k/top-100k scores from FPL standings API
+- `phase_post_gw()` extended — prints post-match summary and updates accuracy log after each GW
+
+**Config** (`src/config.py`, `user_config.example.yaml`)
+- `load_user_config()` / `UserConfigError` — validated loader for gitignored `user_config.yaml`
+- New URL constants: `FPL_ENTRY_URL`, `FPL_EVENT_URL`, `FPL_LEAGUES_CLASSIC_URL`
+
+---
+
 ## Improvement Ideas (Prioritised)
 
 ### P1 — High Impact, Low Effort

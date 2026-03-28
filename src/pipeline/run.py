@@ -20,11 +20,15 @@ import pandas as pd
 from src.config import (
     VAASTAV_DIR, RESULTS_DIR, MODELS_DIR, CURRENT_SEASON,
     ACTIVE_MODEL, BOOTSTRAP_MAX_AGE_HOURS,
+    FPL_ENTRY_URL, load_user_config, UserConfigError,
 )
 from src.pipeline.fetch import (
     fetch_bootstrap, get_current_gw, get_next_deadline,
     extract_xp_snapshot, fetch_fixtures, fetch_live_gw_data,
+    _api_get_with_retry,
 )
+from src.pipeline.user import fetch_user_team_state
+from src.pipeline.recommend import recommend_transfers, recommend_wildcard, save_recommend_csv
 from src.pipeline.prepare import build_merged_dataset
 from src.pipeline.features import engineer_features
 from src.pipeline.predict import predict_next_gw, get_feature_columns, save_full_predictions
@@ -263,6 +267,106 @@ def phase_post_gw():
     print("[post-gw] Done. Run 'predict' to update features with new data.")
 
 
+def _is_wildcard_mode(user_state, wildcard_flag: bool) -> bool:
+    """Return True if wildcard or free-hit chip is active, or flag explicitly set."""
+    if wildcard_flag:
+        return True
+    return user_state.active_chip in ("wildcard", "freehit")
+
+
+def phase_recommend(
+    target_gw: int | None = None,
+    team_key: str = "default",
+    horizon: int | None = None,
+    wildcard: bool = False,
+) -> dict | None:
+    """Recommend phase: fetch user state, load predictions, run transfer optimizer."""
+    # Load user config
+    try:
+        cfg = load_user_config()
+    except UserConfigError as e:
+        print(f"[recommend] ERROR: {e}")
+        return None
+
+    entry_id = cfg["teams"][team_key]["entry_id"]
+    prefs = cfg["preferences"]
+    horizon = horizon or prefs["horizon_gws"]
+    fdr_sensitivity = prefs["fdr_sensitivity"]
+    max_hit_points = prefs["max_hit_points"]
+
+    # Load predictions
+    gw_label = f"gw{target_gw}" if target_gw else "latest"
+    pred_path = RESULTS_DIR / f"predictions_{gw_label}.csv"
+    if not pred_path.exists():
+        print(f"[recommend] ERROR: Predictions not found at {pred_path}. Run 'predict' first.")
+        return None
+
+    predictions = pd.read_csv(pred_path)
+    print(f"[recommend] Loaded {len(predictions)} player predictions from {pred_path}")
+
+    # Fetch user team state
+    print(f"[recommend] Fetching team state for entry {entry_id}...")
+    try:
+        bootstrap = _load_cached_bootstrap(target_gw)
+        if bootstrap is None:
+            bootstrap = fetch_bootstrap()
+        user_state = fetch_user_team_state(entry_id, target_gw or get_current_gw(bootstrap), bootstrap)
+    except Exception as e:
+        print(f"[recommend] ERROR fetching team state: {e}")
+        return None
+
+    print(f"[recommend] Team: {len(user_state.current_squad)} players, "
+          f"bank £{user_state.bank/10:.1f}m, {user_state.free_transfers} FT(s)")
+
+    # Fetch fixtures for FDR
+    try:
+        fixtures = fetch_fixtures()
+    except Exception:
+        fixtures = []
+        print("[recommend] WARNING: Could not fetch fixtures. FDR weighting disabled.")
+
+    # Run optimizer
+    if _is_wildcard_mode(user_state, wildcard):
+        chip_name = user_state.active_chip or "wildcard (flag)"
+        print(f"[recommend] {chip_name} active — running unconstrained squad selection")
+        plan = recommend_wildcard(user_state, predictions)
+    else:
+        plan = recommend_transfers(
+            user_state=user_state,
+            predictions=predictions,
+            fixtures=fixtures,
+            horizon=horizon,
+            fdr_sensitivity=fdr_sensitivity,
+            max_hit_points=max_hit_points,
+        )
+
+    # Print summary
+    print(f"\n{'='*50}")
+    print(f"TRANSFER RECOMMENDATIONS (GW{target_gw}, horizon={horizon})")
+    print(f"{'='*50}")
+    transfers_by_gw = plan.get("transfers", [])
+    if isinstance(transfers_by_gw, list) and transfers_by_gw:
+        for gw_offset, gw_data in enumerate(transfers_by_gw):
+            gw = (target_gw or 0) + gw_offset
+            t_list = gw_data if isinstance(gw_data, list) else gw_data.get("transfers", [])
+            if t_list:
+                for t in t_list:
+                    print(f"  GW{gw}: OUT {t['player_out']} (£{t['price_out']:.1f}m) "
+                          f"→ IN {t['player_in']} (£{t['price_in']:.1f}m)")
+            else:
+                print(f"  GW{gw}: Hold")
+    print(f"\nProjected xP ({horizon} GWs): {plan.get('projected_xp', 0):.1f}")
+    print(f"Transfer cost: {plan.get('hit_cost', 0)} points")
+    print(f"Bank after: £{plan.get('bank_after', 0):.1f}m")
+
+    # Save CSV
+    out_path = RESULTS_DIR / f"recommend_{gw_label}.csv"
+    save_recommend_csv(plan, out_path, start_gw=target_gw or 0)
+    print(f"\nSaved to {out_path}")
+
+    return plan
+
+
 def phase_retrain(target_gw: int | None = None):
     """Phase 4: Retrain RF model on full dataset (manual trigger)."""
     from sklearn.ensemble import RandomForestRegressor
@@ -316,9 +420,15 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     parser = argparse.ArgumentParser(description="FPL Weekly Pipeline")
-    parser.add_argument("phase", choices=["pre-deadline", "predict", "post-gw", "retrain", "full"],
-                        help="Pipeline phase to run")
+    parser.add_argument(
+        "phase",
+        choices=["pre-deadline", "predict", "post-gw", "retrain", "full", "recommend"],
+        help="Pipeline phase to run",
+    )
     parser.add_argument("--gw", type=int, help="Target gameweek (optional)")
+    parser.add_argument("--horizon", type=int, help="GWs to plan ahead (1-5, default from config)")
+    parser.add_argument("--wildcard", action="store_true", help="Ignore current squad (wildcard/FH mode)")
+    parser.add_argument("--team", default="default", help="Which team from user_config.yaml (default/alt)")
     args = parser.parse_args()
 
     if args.phase == "pre-deadline":
@@ -333,6 +443,13 @@ def main():
         gw = phase_pre_deadline()
         if gw:
             phase_predict(gw)
+    elif args.phase == "recommend":
+        phase_recommend(
+            target_gw=args.gw,
+            team_key=args.team,
+            horizon=args.horizon,
+            wildcard=args.wildcard,
+        )
 
 
 if __name__ == "__main__":

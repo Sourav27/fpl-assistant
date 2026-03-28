@@ -3,7 +3,9 @@ import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+import pandas as pd
 from src.pipeline.run import phase_pre_deadline, phase_predict, phase_post_gw, phase_retrain
+from src.config import UserConfigError
 
 
 class TestPhasePreDeadline:
@@ -134,3 +136,38 @@ class TestPhaseRetrain:
             phase_retrain(target_gw=32)
 
         assert (models_dir / "rf_model_gw32.sav").exists()
+
+
+class TestRecommendPhase:
+    def test_recommend_phase_requires_predictions_file(self, tmp_path, monkeypatch):
+        """If predictions_gw{N}.csv is missing, phase should print error and return."""
+        from src.pipeline.run import phase_recommend
+        import src.pipeline.run as run_mod
+        monkeypatch.setattr(run_mod, "RESULTS_DIR", tmp_path)
+        # No user_config.yaml → should raise or print error cleanly
+        result = phase_recommend(target_gw=33, team_key="default")
+        assert result is None
+
+    def test_recommend_phase_wildcard_auto_detected(self):
+        """Wildcard chip auto-detected from user state activates unconstrained mode."""
+        from src.pipeline.user import UserTeamState
+        from src.pipeline.run import _is_wildcard_mode
+        state = UserTeamState(
+            entry_id=123, current_squad=list(range(1, 16)),
+            squad_codes=list(range(101, 116)),
+            selling_prices={i: 67 for i in range(1, 16)},
+            bank=0, free_transfers=1, active_chip="wildcard", total_value=0,
+        )
+        assert _is_wildcard_mode(state, wildcard_flag=False) is True
+
+    def test_recommend_phase_wildcard_flag_overrides(self):
+        from src.pipeline.user import UserTeamState
+        from src.pipeline.run import _is_wildcard_mode
+        state = UserTeamState(
+            entry_id=123, current_squad=list(range(1, 16)),
+            squad_codes=list(range(101, 116)),
+            selling_prices={i: 67 for i in range(1, 16)},
+            bank=0, free_transfers=1, active_chip=None, total_value=0,
+        )
+        assert _is_wildcard_mode(state, wildcard_flag=True) is True
+        assert _is_wildcard_mode(state, wildcard_flag=False) is False

@@ -1,12 +1,26 @@
 # Track A — User Team Sync, Recommend & Post-Match Analysis
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a `recommend` CLI phase that reads the user's real FPL squad/budget from the API and produces a multi-GW transfer plan, then extend `post-gw` to compare predictions vs actuals and log season benchmarks.
 
 **Architecture:** Two new modules (`user.py` for API data fetching, `recommend.py` for ILP), one new module (`analysis.py` for post-match), all wired into `run.py`. `predict.py` gains a side-effect: saves full player predictions CSV that `recommend` and `analysis` consume. User preferences live in a gitignored `user_config.yaml`.
 
 **Tech Stack:** Python, PuLP (already in requirements), PyYAML (add to requirements), pandas, unittest.mock for tests. No new dependencies beyond PyYAML.
+
+---
+
+## ✅ STATUS: COMPLETE (2026-03-29 04:30 IST)
+
+All tasks (1–13) + Final step implemented and committed to master. Full test suite passing (116 tests). Remote agent completed Tasks 6–Final as scheduled.
+
+**All features now live:**
+- User config YAML loader with FPL entry ID + preferences (horizon, FDR sensitivity, hit cap)
+- FPL API integration: fetch squad, bank, free transfers, historical benchmarks
+- Multi-GW transfer planner with FT banking constraints & -4 hit cost
+- Wildcard/free-hit unconstrained squad rebuild
+- Post-match analysis: prediction misses, dream team, accuracy benchmarks
+- Full CSV export for all phases + new `recommend` CLI with `--horizon/--wildcard/--team` flags
 
 ---
 
@@ -45,7 +59,7 @@ Modified:
 - Modify: `requirements.txt`
 - Test: `tests/test_user_config.py`
 
-- [ ] **Step 1: Add pyyaml to requirements**
+- [x] **Step 1: Add pyyaml to requirements**
 
 ```
 # requirements.txt — add this line:
@@ -54,7 +68,7 @@ pyyaml>=6.0
 
 Run: `pip install pyyaml`
 
-- [ ] **Step 2: Write failing tests**
+- [x] **Step 2: Write failing tests**
 
 Create `tests/test_user_config.py`:
 
@@ -133,14 +147,14 @@ teams:
         assert cfg["teams"]["alt"]["entry_id"] == 456
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 ```bash
 python -m pytest tests/test_user_config.py -v
 ```
 Expected: FAIL — `ImportError: cannot import name 'load_user_config'`
 
-- [ ] **Step 4: Add `UserConfigError`, `load_user_config()`, and new URL constants to `src/config.py`**
+- [x] **Step 4: Add `UserConfigError`, `load_user_config()`, and new URL constants to `src/config.py`**
 
 Add after the existing imports at the top of `src/config.py`:
 
@@ -219,7 +233,7 @@ def load_user_config(path: Path | None = None) -> dict:
     return cfg
 ```
 
-- [ ] **Step 5: Create `user_config.example.yaml`**
+- [x] **Step 5: Create `user_config.example.yaml`**
 
 ```yaml
 # user_config.example.yaml — copy to user_config.yaml and fill in your IDs
@@ -239,20 +253,20 @@ preferences:
   fdr_sensitivity: 0.15    # how much fixture difficulty shifts xP (0 = ignore FDR, 0.3 = aggressive)
 ```
 
-- [ ] **Step 6: Add `user_config.yaml` to `.gitignore`**
+- [x] **Step 6: Add `user_config.yaml` to `.gitignore`**
 
 ```bash
 echo "user_config.yaml" >> .gitignore
 ```
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [x] **Step 7: Run tests to verify they pass**
 
 ```bash
 python -m pytest tests/test_user_config.py -v
 ```
 Expected: 7 tests PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/config.py user_config.example.yaml tests/test_user_config.py requirements.txt .gitignore
@@ -269,7 +283,7 @@ git commit -m "feat: add user_config.yaml loader with validation and defaults"
 - Create: `src/pipeline/user.py`
 - Test: `tests/test_user.py`
 
-- [ ] **Step 1: Write failing tests for the dataclass**
+- [x] **Step 1: Write failing tests for the dataclass**
 
 Create `tests/test_user.py`:
 
@@ -311,14 +325,14 @@ class TestUserTeamStateDataclass:
         assert state.active_chip is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 python -m pytest tests/test_user.py::TestUserTeamStateDataclass -v
 ```
 Expected: FAIL — `ImportError`
 
-- [ ] **Step 3: Create `src/pipeline/user.py` with dataclass**
+- [x] **Step 3: Create `src/pipeline/user.py` with dataclass**
 
 ```python
 """FPL user team state fetcher and post-match analysis helpers."""
@@ -353,7 +367,7 @@ class UserTeamState:
         self.free_transfers = min(self.free_transfers, 5)
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 python -m pytest tests/test_user.py::TestUserTeamStateDataclass -v
@@ -370,7 +384,7 @@ Expected: 3 tests PASS
 - Modify: `src/pipeline/user.py`
 - Modify: `tests/test_user.py`
 
-- [ ] **Step 1: Write failing tests for fetch_user_team_state**
+- [x] **Step 1: Write failing tests for fetch_user_team_state**
 
 Add to `tests/test_user.py`. Note: `sample_bootstrap_json` is defined in `tests/conftest.py` (already exists) — import it via pytest fixture injection, not manually.
 
@@ -475,14 +489,14 @@ class TestFetchUserTeamState:
         assert 1 <= state.free_transfers <= 5
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 python -m pytest tests/test_user.py::TestFetchUserTeamState -v
 ```
 Expected: FAIL — `ImportError: cannot import name 'fetch_user_team_state'`
 
-- [ ] **Step 3: Implement `fetch_user_team_state()` in `src/pipeline/user.py`**
+- [x] **Step 3: Implement `fetch_user_team_state()` in `src/pipeline/user.py`**
 
 ```python
 def fetch_user_team_state(
@@ -552,7 +566,7 @@ def fetch_user_team_state(
     )
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 python -m pytest tests/test_user.py::TestFetchUserTeamState -v
@@ -567,7 +581,7 @@ Expected: FAIL — `compute_selling_price` and `_compute_free_transfers` not yet
 - Modify: `src/pipeline/user.py`
 - Modify: `tests/test_user.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add to `tests/test_user.py`:
 
@@ -594,14 +608,14 @@ class TestComputeSellingPrice:
         assert compute_selling_price(100, 102) == 101
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_user.py::TestComputeSellingPrice -v
 ```
 Expected: FAIL — function not defined
 
-- [ ] **Step 3: Implement helpers in `src/pipeline/user.py`**
+- [x] **Step 3: Implement helpers in `src/pipeline/user.py`**
 
 ```python
 def compute_selling_price(purchase_price: int, current_price: int) -> int:
@@ -636,14 +650,14 @@ def _compute_free_transfers(gw_history: list[dict], current_gw: int) -> int:
     return max(ft, 1)
 ```
 
-- [ ] **Step 4: Run all user tests**
+- [x] **Step 4: Run all user tests**
 
 ```bash
 python -m pytest tests/test_user.py -v
 ```
 Expected: all tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pipeline/user.py src/config.py tests/test_user.py
@@ -661,7 +675,7 @@ git commit -m "feat: add user.py with UserTeamState dataclass and FPL API fetchi
 - Modify: `src/pipeline/run.py`
 - Modify: `tests/test_predict.py` (add one test)
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Open `tests/test_predict.py` and add to the end:
 
@@ -689,14 +703,14 @@ class TestSaveFullPredictionsCSV:
         assert saka["now_cost"] == 105
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_predict.py::TestSaveFullPredictionsCSV -v
 ```
 Expected: FAIL
 
-- [ ] **Step 3: Add `save_full_predictions()` to `src/pipeline/predict.py`**
+- [x] **Step 3: Add `save_full_predictions()` to `src/pipeline/predict.py`**
 
 Add after the existing `predict_next_gw()` function:
 
@@ -720,7 +734,7 @@ def save_full_predictions(predictions: pd.DataFrame, path: Path) -> None:
     df.to_csv(path, index=False)
 ```
 
-- [ ] **Step 4: Call `save_full_predictions()` from `phase_predict()` in `src/pipeline/run.py`**
+- [x] **Step 4: Call `save_full_predictions()` from `phase_predict()` in `src/pipeline/run.py`**
 
 In `run.py`, add the import at the top:
 
@@ -737,14 +751,14 @@ In `phase_predict()`, after the line `RESULTS_DIR.mkdir(parents=True, exist_ok=T
     print(f"[predict] Saved full predictions ({len(predictions)} players) to {pred_path}")
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 python -m pytest tests/test_predict.py -v
 ```
 Expected: all PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/pipeline/predict.py src/pipeline/run.py tests/test_predict.py
@@ -761,7 +775,7 @@ git commit -m "feat: save full predictions CSV for recommend and analysis phases
 - Create: `src/pipeline/recommend.py`
 - Create: `tests/test_recommend.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create `tests/test_recommend.py`:
 
@@ -838,14 +852,14 @@ class TestBuildFixtureFdrMap:
         assert fdr_map[(1, 34)] == pytest.approx(3.5)
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_recommend.py::TestComputeFdrWeight tests/test_recommend.py::TestBuildFixtureFdrMap -v
 ```
 Expected: FAIL — ImportError
 
-- [ ] **Step 3: Create `src/pipeline/recommend.py` with FDR helpers**
+- [x] **Step 3: Create `src/pipeline/recommend.py` with FDR helpers**
 
 ```python
 """Transfer-aware multi-GW optimizer for FPL team recommendations."""
@@ -903,14 +917,14 @@ def build_fixture_fdr_map(
     return {key: sum(vals) / len(vals) for key, vals in fdr_accumulator.items()}
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 python -m pytest tests/test_recommend.py::TestComputeFdrWeight tests/test_recommend.py::TestBuildFixtureFdrMap -v
 ```
 Expected: all PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pipeline/recommend.py tests/test_recommend.py
@@ -927,7 +941,7 @@ git commit -m "feat: recommend.py FDR helpers — compute_fdr_weight, build_fixt
 - Modify: `src/pipeline/recommend.py`
 - Modify: `tests/test_recommend.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add to `tests/test_recommend.py`:
 
@@ -1017,14 +1031,14 @@ class TestRecommendSingleGW:
         assert plan["hit_cost"] % 4 == 0
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_recommend.py::TestRecommendSingleGW -v
 ```
 Expected: FAIL
 
-- [ ] **Step 3: Implement `recommend_transfers()` with single-GW support in `src/pipeline/recommend.py`**
+- [x] **Step 3: Implement `recommend_transfers()` with single-GW support in `src/pipeline/recommend.py`**
 
 Add after the FDR helpers:
 
@@ -1176,14 +1190,14 @@ def _recommend_single_gw(
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 python -m pytest tests/test_recommend.py::TestRecommendSingleGW -v
 ```
 Expected: all PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pipeline/recommend.py tests/test_recommend.py
@@ -1200,7 +1214,7 @@ git commit -m "feat: recommend_transfers single-GW mode with hit cost and budget
 - Modify: `src/pipeline/recommend.py`
 - Modify: `tests/test_recommend.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add to `tests/test_recommend.py`:
 
@@ -1266,14 +1280,14 @@ class TestRecommendMultiGW:
             assert hit <= 4
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_recommend.py::TestRecommendMultiGW -v
 ```
 Expected: FAIL
 
-- [ ] **Step 3: Add `build_xp_matrix()` and `_recommend_multi_gw()` to `src/pipeline/recommend.py`**
+- [x] **Step 3: Add `build_xp_matrix()` and `_recommend_multi_gw()` to `src/pipeline/recommend.py`**
 
 ```python
 def build_xp_matrix(
@@ -1515,14 +1529,14 @@ def _recommend_multi_gw(
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 python -m pytest tests/test_recommend.py -v
 ```
 Expected: all PASS (may be slow for multi-GW ILP — < 60s acceptable)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pipeline/recommend.py tests/test_recommend.py
@@ -1539,7 +1553,7 @@ git commit -m "feat: multi-GW ILP transfer planner with FT banking and FDR weigh
 - Modify: `src/pipeline/recommend.py`
 - Modify: `tests/test_recommend.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add to `tests/test_recommend.py`:
 
@@ -1590,13 +1604,13 @@ class TestSaveRecommendCSV:
         assert "hit_cost" in df.columns
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_recommend.py::TestRecommendWildcard tests/test_recommend.py::TestSaveRecommendCSV -v
 ```
 
-- [ ] **Step 3: Add wildcard and CSV output to `src/pipeline/recommend.py`**
+- [x] **Step 3: Add wildcard and CSV output to `src/pipeline/recommend.py`**
 
 ```python
 def recommend_wildcard(
@@ -1663,7 +1677,7 @@ def save_recommend_csv(plan: dict, path: "Path", start_gw: int) -> None:
     pd.DataFrame(rows).to_csv(path, index=False)
 ```
 
-- [ ] **Step 4: Update `optimize_team()` in `src/pipeline/optimize.py` to accept optional budget override**
+- [x] **Step 4: Update `optimize_team()` in `src/pipeline/optimize.py` to accept optional budget override**
 
 In `optimize.py`, change the `select_squad()` signature to accept an optional `budget` parameter:
 
@@ -1684,14 +1698,14 @@ def optimize_team(players: pd.DataFrame, budget: int | None = None) -> dict:
     ...
 ```
 
-- [ ] **Step 5: Run all recommend tests**
+- [x] **Step 5: Run all recommend tests**
 
 ```bash
 python -m pytest tests/test_recommend.py -v
 ```
 Expected: all PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/pipeline/recommend.py src/pipeline/optimize.py tests/test_recommend.py
@@ -1708,7 +1722,7 @@ git commit -m "feat: wildcard mode and save_recommend_csv output"
 - Modify: `src/pipeline/run.py`
 - Modify: `tests/test_run.py`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Open `tests/test_run.py` and add:
 
@@ -1748,13 +1762,13 @@ class TestRecommendPhase:
         assert _is_wildcard_mode(state, wildcard_flag=False) is False
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_run.py::TestRecommendPhase -v
 ```
 
-- [ ] **Step 3: Add `phase_recommend()` and `_is_wildcard_mode()` to `src/pipeline/run.py`**
+- [x] **Step 3: Add `phase_recommend()` and `_is_wildcard_mode()` to `src/pipeline/run.py`**
 
 Add new imports at the top of `run.py`:
 
@@ -1891,14 +1905,14 @@ In the `if/elif` chain:
         )
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 python -m pytest tests/test_run.py -v
 ```
 Expected: all PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pipeline/run.py tests/test_run.py
@@ -1915,7 +1929,7 @@ git commit -m "feat: add recommend phase CLI with --horizon, --wildcard, --team 
 - Create: `src/pipeline/analysis.py`
 - Create: `tests/test_analysis.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create `tests/test_analysis.py`:
 
@@ -1986,13 +2000,13 @@ class TestComputeDreamTeam:
         assert pos_counts.get("FWD", 0) >= 1
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_analysis.py -v
 ```
 
-- [ ] **Step 3: Create `src/pipeline/analysis.py`**
+- [x] **Step 3: Create `src/pipeline/analysis.py`**
 
 ```python
 """Post-match analysis: prediction accuracy, benchmarks, and season logging."""
@@ -2086,14 +2100,14 @@ def format_post_match_summary(
     return "\n".join(lines)
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 python -m pytest tests/test_analysis.py -v
 ```
 Expected: all PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pipeline/analysis.py tests/test_analysis.py
@@ -2110,7 +2124,7 @@ git commit -m "feat: analysis.py — prediction misses, dream team, post-match s
 - Modify: `tests/test_user.py`
 - Modify: `tests/test_analysis.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add to `tests/test_user.py`:
 
@@ -2183,13 +2197,13 @@ class TestAppendAccuracyLog:
         assert list(df["gw"]) == [31, 32]
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_user.py::TestFetchGwBenchmarks tests/test_analysis.py::TestAppendAccuracyLog -v
 ```
 
-- [ ] **Step 3: Add `fetch_gw_benchmarks()` to `src/pipeline/user.py`**
+- [x] **Step 3: Add `fetch_gw_benchmarks()` to `src/pipeline/user.py`**
 
 ```python
 def fetch_gw_benchmarks(
@@ -2236,7 +2250,7 @@ def fetch_gw_benchmarks(
     return benchmarks
 ```
 
-- [ ] **Step 4: Add `append_accuracy_log()` to `src/pipeline/analysis.py`**
+- [x] **Step 4: Add `append_accuracy_log()` to `src/pipeline/analysis.py`**
 
 ```python
 def append_accuracy_log(
@@ -2282,14 +2296,14 @@ def append_accuracy_log(
     df_all.to_csv(path, index=False)
 ```
 
-- [ ] **Step 5: Run all tests**
+- [x] **Step 5: Run all tests**
 
 ```bash
 python -m pytest tests/test_user.py tests/test_analysis.py -v
 ```
 Expected: all PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/pipeline/user.py src/pipeline/analysis.py tests/test_user.py tests/test_analysis.py
@@ -2306,7 +2320,7 @@ git commit -m "feat: benchmark fetch and accuracy_log CSV for post-match analysi
 - Modify: `src/pipeline/run.py`
 - Modify: `tests/test_run.py`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Add to `tests/test_run.py`:
 
@@ -2333,13 +2347,13 @@ class TestPostGwAnalysis:
             run_mod.phase_post_gw()
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 ```bash
 python -m pytest tests/test_run.py::TestPostGwAnalysis -v
 ```
 
-- [ ] **Step 3: Extend `phase_post_gw()` in `run.py`**
+- [x] **Step 3: Extend `phase_post_gw()` in `run.py`**
 
 Add imports at the top:
 
@@ -2486,14 +2500,14 @@ from src.config import (
 )
 ```
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 ```bash
 python -m pytest tests/ -q
 ```
 Expected: all tests pass (was 64, now 64 + new tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pipeline/run.py src/pipeline/analysis.py tests/test_run.py tests/test_analysis.py
@@ -2504,21 +2518,21 @@ git commit -m "feat: extend post-gw with P2a post-match analysis and accuracy_lo
 
 ## Final: Integration smoke test
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 ```bash
 python -m pytest tests/ -v --tb=short
 ```
 Expected: all PASS, no new failures
 
-- [ ] **Step 2: Smoke test CLI help**
+- [x] **Step 2: Smoke test CLI help**
 
 ```bash
 python -m src.pipeline.run --help
 ```
 Expected: shows `recommend` in phase choices with `--horizon`, `--wildcard`, `--team`
 
-- [ ] **Step 3: Commit docs update**
+- [x] **Step 3: Commit docs update**
 
 ```bash
 # Update improvements-roadmap.md to mark P1 and P2a as implemented

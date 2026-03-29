@@ -2,7 +2,7 @@
 
 Distilled from archived research code (`_original/notebooks/`, `_original/optimization/`,
 `_original/data_collection/`) before those folders were removed from version control.
-Last updated: 2026-03-28.
+Last updated: 2026-03-29.
 
 ---
 
@@ -63,25 +63,56 @@ Ranked by Random Forest mean decrease in impurity:
 
 ## Implemented Features (Track A — 2026-03-29)
 
-The following pipeline extensions were implemented as part of the Track A plan:
+These are **new pipeline features** added in Track A (not the P1/P2/P3 improvement items below,
+which are ML model quality improvements). Track A added the user-facing workflow layer on top
+of the existing predict → optimize pipeline.
 
-**P1 — User Team Sync & Transfer Recommendations** (`src/pipeline/user.py`, `src/pipeline/recommend.py`)
-- `UserTeamState` dataclass + `fetch_user_team_state()` — reads real FPL squad, bank, FTs, chip from the public API
-- `recommend_transfers()` — single-GW and multi-GW ILP transfer planner with FDR weighting, hit cost, and FT banking
-- `recommend_wildcard()` — unconstrained squad rebuild using total squad value as budget (wildcard/free hit)
-- `phase_recommend` CLI phase — `python -m src.pipeline.run recommend --gw N --horizon 3 --wildcard`
-- `save_full_predictions()` in `predict.py` — saves `results/predictions_gw{N}.csv` for downstream use
+### Track A — User Team Sync (`src/pipeline/user.py`)
 
-**P2a — Post-Match Analysis** (`src/pipeline/analysis.py`, extensions to `run.py`)
-- `compute_prediction_misses()` — identifies biggest over/underperformers vs xP predictions
-- `compute_dream_team()` — derives optimal XI from live GW scores for benchmarking
-- `append_accuracy_log()` — season-long CSV log at `results/accuracy_log.csv`
-- `fetch_gw_benchmarks()` — fetches best/avg/top-1k/top-10k/top-100k scores from FPL standings API
-- `phase_post_gw()` extended — prints post-match summary and updates accuracy log after each GW
+| Function | What it does |
+|----------|-------------|
+| `UserTeamState` | Dataclass holding squad (15 element IDs), squad codes, selling prices, bank, FTs, active chip. All costs in 0.1M units (FPL convention). |
+| `fetch_user_team_state(entry_id, gw, bootstrap)` | Hits `/entry/{id}/event/{gw}/picks/`, `/entry/{id}/`, and `/entry/{id}/history/` to build a `UserTeamState`. Maps element IDs → persistent `code` values via bootstrap. |
+| `compute_selling_price(purchase, current)` | FPL sell-price formula: `purchase + floor((current − purchase) / 2)`. No haircut on price drops. |
+| `_compute_free_transfers(gw_history, current_gw)` | Simulates FT banking from match history. Unused FT banks 1 (cap 5); after transfers used, resets to 1 + 1. |
+| `fetch_gw_benchmarks(gw, bootstrap, league_id)` | Reads `highest_score` / `average_entry_score` from bootstrap events; paginates the overall standings API to find top-1k / 10k / 100k / 1M cutoffs. |
 
-**Config** (`src/config.py`, `user_config.example.yaml`)
-- `load_user_config()` / `UserConfigError` — validated loader for gitignored `user_config.yaml`
+### Track A — Transfer Recommender (`src/pipeline/recommend.py`)
+
+| Function | What it does |
+|----------|-------------|
+| `compute_fdr_weight(fdr, sensitivity)` | `1.0 − sensitivity × (fdr_team − 3) / 2`. FDR 1 → boost, FDR 5 → discount. Clamped ≥ 0. |
+| `build_fixture_fdr_map(fixtures, gws)` | `{(team_id, gw): avg_fdr_team}`. Double GWs average both fixtures. Teams with no fixture absent (blank GW). Always uses `fdr_team` (not `fdr_opp`). |
+| `build_xp_matrix(predictions, fixtures, team_id_map, gws, sensitivity)` | Player × GW DataFrame of FDR-adjusted xP. Blank GW = 0. |
+| `recommend_transfers(user_state, predictions, fixtures, horizon, …)` | Dispatcher: `horizon=1` → single-GW ILP; `horizon≥2` → multi-GW ILP. |
+| `_recommend_single_gw(…)` | PuLP ILP. Variables: `x` (squad), `transfer_in/out`, `captain`, `hits`. Objective: `Σ xP·x + Σ xP·cap − 4·hits`. Budget constraint in 0.1M units. |
+| `_recommend_multi_gw(…)` | Multi-period PuLP ILP over `horizon` GWs. FT carry-forward linearised with big-M=20. Bank tracked per GW. FDR weighting applied GW1+. |
+| `recommend_wildcard(user_state, predictions)` | Calls `optimize_team(budget=user_state.total_value)` — unconstrained rebuild within current squad value. |
+| `save_recommend_csv(plan, path, start_gw)` | Flattens per-GW transfer lists to CSV with columns: `gw, action, player_out, player_in, price_out, price_in, xp_out, xp_in, hit_cost, bank_after`. |
+
+**Known limitations:**
+- Multi-GW FDR weighting requires a `team_id_map` (team name → FPL team ID). Without bootstrap this mapping isn't built inside `_recommend_multi_gw`, so future GW xP falls back to raw xP (no FDR adjustment). The single-GW path also doesn't apply FDR today — it uses raw xP from predictions CSV.
+- Captain in `_recommend_single_gw` is required to be in the squad (not strictly in the XI). This is a slight relaxation vs FPL rules but doesn't affect the result materially since the captain is always selected for the XI by the optimizer.
+
+### Track A — Post-Match Analysis (`src/pipeline/analysis.py`)
+
+| Function | What it does |
+|----------|-------------|
+| `compute_prediction_misses(picks_df, top_n=5)` | `actual_points − xP` per player, sorted by `abs(miss)` descending. Returns top N as list of dicts. |
+| `compute_dream_team(live_data)` | Aliases `total_points → xP`, calls `select_xi()` on the full live player pool. No 3-per-club cap (matches FPL dream team rules). |
+| `format_post_match_summary(…)` | Formats terminal output: your team vs recommended vs dream, benchmarks table, biggest misses. |
+| `append_accuracy_log(path, gw, …)` | Appends one row to `results/accuracy_log.csv`. Columns: `gw, your_pts, your_predicted_xp, recommended_pts, recommended_xp, dream_team_pts, your_percentile_rank, best_score, top_1k/10k/100k/1m_score, avg_score, median_score, ranked_count, timestamp`. Creates file on first run. |
+
+### Track A — Config & CLI (`src/config.py`, `user_config.example.yaml`, `src/pipeline/run.py`)
+
+- `load_user_config(path)` / `UserConfigError` — validates `user_config.yaml`: requires `teams.default.entry_id` (int), optional `teams.alt`, `preferences.horizon_gws` (1–5), `max_hit_points`, `fdr_sensitivity`. Applies defaults for missing preference keys.
 - New URL constants: `FPL_ENTRY_URL`, `FPL_EVENT_URL`, `FPL_LEAGUES_CLASSIC_URL`
+- `optimize_team()` / `select_squad()` gain optional `budget: int | None` param (falls back to `SQUAD_RULES["budget"]` = 1000 units = £100M)
+- `predict.save_full_predictions()` — writes `results/predictions_gw{N}.csv` with columns `element, code, name, position, team, xP, now_cost` (now_cost in 0.1M units)
+- New CLI phases: `recommend` with flags `--horizon N`, `--wildcard`, `--team KEY`
+- `phase_post_gw()` extended: after saving live data, loads predictions + user picks, computes dream team and benchmarks, prints summary, appends accuracy log — all skipped gracefully if `user_config.yaml` is missing
+
+**Tests added:** 31 new tests (115 total, up from 84). All in `tests/test_recommend.py`, `tests/test_analysis.py`, and extensions to `tests/test_user.py`, `tests/test_run.py`.
 
 ---
 
@@ -232,20 +263,28 @@ a reference for regression testing when the optimizer is modified.
 
 ---
 
-## API Endpoints (from `_original/data_collection/getters.py`)
+## API Endpoints
 
 ```python
 BASE_URL = "https://fantasy.premierleague.com/api/"
 
-bootstrap  = BASE_URL + "bootstrap-static/"       # All player + team metadata
-element    = BASE_URL + "element-summary/{id}/"   # Per-player GW history
-fixtures   = BASE_URL + "fixtures/"               # All fixtures with FDR
-live       = BASE_URL + "event/{gw}/live/"        # Live GW points (mid-match)
+# Original (from _original/data_collection/getters.py) — all in src/pipeline/fetch.py
+bootstrap  = BASE_URL + "bootstrap-static/"          # All player + team metadata
+element    = BASE_URL + "element-summary/{id}/"      # Per-player GW history
+fixtures   = BASE_URL + "fixtures/"                  # All fixtures with FDR
+live       = BASE_URL + "event/{gw}/live/"           # Live GW points (mid-match)
+
+# Added in Track A — all in src/pipeline/user.py via FPL_*_URL constants in src/config.py
+entry      = BASE_URL + "entry/{id}/"                # Entry info: bank, league membership
+picks      = BASE_URL + "entry/{id}/event/{gw}/picks/"  # GW squad picks + selling prices
+history    = BASE_URL + "entry/{id}/history/"        # GW-by-GW history + transfer log
+standings  = BASE_URL + "leagues-classic/{id}/standings/?page_standings={p}&event={gw}"
+                                                     # Overall league standings (paginated, 50/page)
 ```
 
 No authentication required. No published rate limits, but 3–5 s sleep between
 player fetches is safe (700 players ≈ 35 min for full collection).
-All endpoints implemented in `src/pipeline/fetch.py`.
+The standings endpoint is used to find score cutoffs at ranks 1k/10k/100k/1M.
 
 ---
 

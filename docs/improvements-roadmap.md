@@ -146,6 +146,80 @@ File: `src/pipeline/run.py:phase_retrain()`. Risk: low — drop-in replacement.
 
 ---
 
+### 💡 Track F — Web App (Dashboard + API)
+**Status:** BACKLOG · **Effort:** ~1 week
+**Plan:** Not yet written — run brainstorming skill before starting
+
+**Objective:** Expose pipeline outputs as a mobile-friendly web dashboard accessible anywhere, with a FastAPI backend that is designed from day one to be consumed by the Chrome extension (Track G+).
+
+**Stack decisions (researched 2026-03-30):**
+- **Backend:** FastAPI (async, `lifespan` pattern) + SQLAlchemy 2.x async
+- **Database:** SQLite locally (`aiosqlite`) → Render free Postgres in prod (`asyncpg`) — swapped via `DATABASE_URL` env var. Alembic for migrations with `render_as_batch=True` for SQLite compatibility.
+- **Frontend:** Vite + React (not Next.js — incompatible with Chrome extension MV3 content scripts)
+- **Monorepo:** pnpm workspaces — `packages/ui` shared component library consumed by both web app and future extension
+- **Deployment:** Render free tier (Dockerfile preferred over Procfile). Alternatives to evaluate later: Railway, Fly.io, Koyeb.
+- **CORS:** `allow_origin_regex=r"chrome-extension://.*"` so the extension can call the same API
+
+**Dashboard layout (single scrollable page):**
+1. **Current squad** — 15 player cards with xP, price, availability badge, FPL news indicator
+2. **Transfer recommendations** — suggested in/out with xP delta and reasoning (FDR, form, fixture)
+3. **Transfer trends** — ownership changes, price rise/fall alerts
+4. **Player news feed** — FPL API news (most reliable) + press conference signals + social signals (Track G)
+5. **Gameweek history** — past GW results, your score vs avg/best
+6. **Accuracy log** — prediction vs actual chart, MAE trend over season
+
+**API contract (must be stable for Chrome extension reuse):**
+```
+GET  /api/squad          → current squad with xP + availability
+GET  /api/recommend      → transfer recommendations with reasoning
+GET  /api/predictions    → full player xP rankings
+GET  /api/accuracy-log   → per-GW benchmark history
+GET  /api/news           → player news feed (FPL + social signals)
+POST /api/pipeline/run   → trigger pipeline phase (predict/recommend)
+```
+
+**Key constraint:** The API shape defined here becomes the Chrome extension's data contract. Design it before building the extension (Track G+).
+
+---
+
+### 💡 Track G — Social Media Signals (Display → Auto-Adjust)
+**Status:** BACKLOG · **Effort:** ~1 week (Phase 1: display) + ~1 week (Phase 2: xP adjustment)
+**Plan:** Not yet written — run brainstorming skill before starting. **Depends on Track F** (needs the news feed API endpoint).
+
+**Objective:** Incorporate pre-deadline intelligence — injury news, rotation risk, lineup leaks — into the dashboard and eventually into the xP model itself.
+
+**Signal source hierarchy (most → least reliable):**
+
+| Tier | Source | Method | Reliability |
+|------|--------|---------|-------------|
+| 1 | **FPL API `news` field** | Already in pipeline (`availability.py`) | Highest — official |
+| 2 | **Club press conferences** | Scrape official club sites / BBC Sport match previews | High — direct manager quotes |
+| 3 | **Minutes tracker** | Compute from existing `element-summary` data — flag players with 90min in UCL/EL within 72h of PL deadline | Medium — heuristic |
+| 4 | **X posts (Nitter RSS)** — FPL Focal, Ben Crellin (BGW/DGW updates) | Nitter RSS feed polling; manual paste fallback if Nitter is down | Medium — source-dependent |
+
+**Phase 1 — Display only (Track G1):**
+- Aggregate all four signal tiers into a unified `PlayerSignal` model: `{player_code, source, signal_type, text, confidence, timestamp}`
+- Display in dashboard news feed panel (Track F)
+- No impact on xP — human reads and decides
+
+**Phase 2 — xP auto-adjustment (Track G2):**
+- Parse signals into structured flags: `rotation_risk`, `doubt`, `confirmed_starter`, `blank_gw`, `double_gw`
+- Apply discount/boost multipliers to xP before `recommend` runs
+- Only adopt after Phase 1 feedback log validates source accuracy ≥ threshold
+
+**Feedback logging (both phases):**
+- When team sheets arrive (~1h before kickoff), log each signal against actual lineup: `{signal_id, predicted_status, actual_started, source, gw}`
+- Build per-source accuracy scores over the season
+- Use scores to weight signal confidence in Phase 2
+
+**X/Twitter access strategy:**
+- Primary: Nitter RSS (self-hosted or public instance) — free, no API key
+- Fallback: Manual paste input in dashboard (`POST /api/news/manual`)
+- Both routes log identically to the feedback system
+- Twitter paid API ($100/mo) explicitly out of scope for personal use
+
+---
+
 ## Recommended Weekly Rhythm
 
 | When | Action |
@@ -155,7 +229,7 @@ File: `src/pipeline/run.py:phase_retrain()`. Risk: low — drop-in replacement.
 | **Thu–Fri** | `python -m src.pipeline.run recommend --gw N --horizon 3` — make transfers |
 | **Sat night** | `python -m src.pipeline.run post-gw` — collect results, update accuracy log |
 | **Monthly** | `python -m src.pipeline.run retrain --gw N` — re-train model on new data |
-| **Off-season** | Work one Track per week: B → C → D → E |
+| **Off-season** | Work one Track per week: B → C → D → E → F → G |
 
 ---
 

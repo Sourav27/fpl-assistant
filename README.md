@@ -38,6 +38,7 @@ Four scheduled phases per gameweek:
   Filter player availability                Save rf_model_gw{N}.sav
   Optimize team (PuLP ILP)                  Print MAE vs old model
   Save xi_gw{N}.csv + squad_gw{N}.csv
+  Save predictions_gw{N}.csv
 ```
 
 **Data layers:**
@@ -78,9 +79,17 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 python -m src.pipeline.run pre-deadline
 
 # Phase 2: After deadline — generate predictions and optimal team
+#           Also saves results/predictions_gw{N}.csv for the recommend phase
 python -m src.pipeline.run predict --gw 32
 
-# Phase 3: After GW completes — collect actual results and live player data
+# Phase 2b: Transfer recommendations (requires user_config.yaml)
+python -m src.pipeline.run recommend --gw 32
+python -m src.pipeline.run recommend --gw 32 --horizon 3    # plan 3 GWs ahead
+python -m src.pipeline.run recommend --gw 32 --wildcard     # wildcard/free-hit mode
+python -m src.pipeline.run recommend --gw 32 --team alt     # use alt team from config
+
+# Phase 3: After GW completes — collect actual results, print post-match analysis,
+#           update results/accuracy_log.csv (requires user_config.yaml)
 python -m src.pipeline.run post-gw
 
 # Phase 4: Retrain model (manual, run when you have enough new data)
@@ -90,7 +99,11 @@ python -m src.pipeline.run retrain --gw 32
 python -m src.pipeline.run full
 ```
 
-The `predict` phase prints the optimal XI directly and saves `results/xi_gw{N}.csv` and `results/squad_gw{N}.csv`.
+The `predict` phase prints the optimal XI and saves `results/xi_gw{N}.csv`, `results/squad_gw{N}.csv`, and `results/predictions_gw{N}.csv`.
+
+The `recommend` phase reads `user_config.yaml` (copy from `user_config.example.yaml` and fill in your FPL entry ID) and saves `results/recommend_gw{N}.csv`.
+
+The `post-gw` phase (when `user_config.yaml` is present) prints a post-match summary comparing your team vs the recommended team vs the dream XI, and appends a row to `results/accuracy_log.csv`.
 
 **Using the cron wrapper (Linux/macOS/WSL):**
 
@@ -115,9 +128,10 @@ chmod +x scripts/weekly_run.sh
 **Pre-GW checklist:**
 1. `python -m src.pipeline.run pre-deadline` — captures xP and bootstrap snapshot
 2. `python -m src.pipeline.run predict --gw <N>` — generates optimal team
-3. Review the XI output — check excluded/scaled players make sense
-4. Make transfers in the FPL app
-5. After GW: `python -m src.pipeline.run post-gw` to collect live results
+3. `python -m src.pipeline.run recommend --gw <N>` — get transfer recommendations (requires `user_config.yaml`)
+4. Review the XI output — check excluded/scaled players make sense
+5. Make transfers in the FPL app
+6. After GW: `python -m src.pipeline.run post-gw` — collect live results and view post-match analysis
 
 ### Model management
 

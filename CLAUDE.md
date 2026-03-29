@@ -29,22 +29,27 @@ fpl-assistant/
 │   ├── improvements-roadmap.md  # P1-P5 roadmap with research insights
 │   └── superpowers/specs/       # Implementation specs for improvements
 ├── src/
-│   ├── config.py                # Central config — ACTIVE_MODEL path, seasons, API URLs
+│   ├── config.py                # Central config — ACTIVE_MODEL path, seasons, API URLs, load_user_config()
 │   └── pipeline/                # Active weekly production pipeline (Python/PuLP)
 │       ├── prepare.py           # Build multi-season dataset; attaches persistent player code
 │       ├── features.py          # Vectorized rolling/momentum feature engineering
-│       ├── predict.py           # Load model, generate xP predictions
+│       ├── predict.py           # Load model, generate xP predictions; saves predictions_gw{N}.csv
 │       ├── availability.py      # Hybrid availability filter (hard exclude / soft scale)
 │       ├── optimize.py          # PuLP ILP — squad + XI + captain selection
 │       ├── fetch.py             # FPL API calls with exponential backoff
-│       └── run.py               # CLI entry point (4 phases)
-├── tests/                   # pytest unit + integration tests (64 tests)
+│       ├── user.py              # UserTeamState dataclass; fetch squad/bank/FTs from FPL API
+│       ├── recommend.py         # Multi-GW ILP transfer planner with FDR weighting
+│       ├── analysis.py          # Post-match analysis: prediction misses, dream team, accuracy log
+│       └── run.py               # CLI entry point (6 phases)
+├── tests/                   # pytest unit + integration tests (115 tests)
 ├── scripts/
 │   └── weekly_run.sh        # Cron-friendly wrapper with timestamped logs
 ├── models/                  # Trained .sav files — git-ignored; regenerate via retrain
-├── results/                 # Output CSVs (xi_gwN.csv, squad_gwN.csv, snapshots/)
+├── results/                 # Output CSVs (xi_gwN.csv, squad_gwN.csv, predictions_gwN.csv,
+│                            #              recommend_gwN.csv, accuracy_log.csv, snapshots/)
 ├── logs/                    # weekly_run.sh output — git-ignored
-├── user_config.yaml         # User team IDs & preferences (git-ignored, REQUIRED for P1 features)
+├── user_config.example.yaml # Template — copy to user_config.yaml and fill in entry_id
+├── user_config.yaml         # User team IDs & preferences (git-ignored, required for recommend/post-gw analysis)
 ├── requirements.txt
 └── .gitignore
 ```
@@ -64,10 +69,16 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 # Phase 1 — before GW deadline: fetch bootstrap, save xP snapshot
 python -m src.pipeline.run pre-deadline
 
-# Phase 2 — generate team selection
+# Phase 2 — generate team selection (also saves results/predictions_gw{N}.csv)
 python -m src.pipeline.run predict --gw <N>
 
-# Phase 3 — after GW ends: collect live results
+# Phase 2b — transfer recommendations (requires user_config.yaml + predictions_gw{N}.csv)
+python -m src.pipeline.run recommend --gw <N>
+python -m src.pipeline.run recommend --gw <N> --horizon 3          # plan 3 GWs ahead
+python -m src.pipeline.run recommend --gw <N> --wildcard           # unconstrained rebuild
+python -m src.pipeline.run recommend --gw <N> --team alt           # use alt team from config
+
+# Phase 3 — after GW ends: collect live results + post-match analysis
 python -m src.pipeline.run post-gw
 
 # Phase 4 — retrain model on expanded data
@@ -76,6 +87,15 @@ python -m src.pipeline.run retrain --gw <N>
 # Or run phases 1+2 together
 python -m src.pipeline.run full
 ```
+
+**`recommend` flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--gw N` | — | Target gameweek (must match a saved `predictions_gw{N}.csv`) |
+| `--horizon N` | from `user_config.yaml` | GWs to plan ahead (1–5) |
+| `--wildcard` | false | Treat as wildcard/free-hit — full unconstrained squad rebuild |
+| `--team KEY` | `default` | Team key from `user_config.yaml` (`default` or `alt`) |
 
 ### Model Management
 

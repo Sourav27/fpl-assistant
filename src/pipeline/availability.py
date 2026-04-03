@@ -50,25 +50,25 @@ def filter_availability(
         # Rule 1: Hard exclude by status
         if status in AVAILABILITY_HARD_EXCLUDE_STATUS:
             exclude_mask[idx] = True
-            logger.info(f"Excluded {row['name']} (status={status}, news={info['news']})")
+            logger.debug(f"Excluded {row['name']} (status={status}, news={info['news']})")
             continue
 
         # Rule 2: Hard exclude by chance
         if chance is not None and chance in AVAILABILITY_HARD_EXCLUDE_CHANCE:
             exclude_mask[idx] = True
-            logger.info(f"Excluded {row['name']} (chance={chance}%, news={info['news']})")
+            logger.debug(f"Excluded {row['name']} (chance={chance}%, news={info['news']})")
             continue
 
         # Rules 3 & 5: Soft scale by chance (50 → 0.50, 75 → 0.75)
         if chance is not None and chance in AVAILABILITY_SOFT_SCALE:
             scale_factors[idx] = AVAILABILITY_SOFT_SCALE[chance]
-            logger.info(f"Scaled {row['name']} xP by {AVAILABILITY_SOFT_SCALE[chance]} (chance={chance}%)")
+            logger.debug(f"Scaled {row['name']} xP by {AVAILABILITY_SOFT_SCALE[chance]} (chance={chance}%)")
             continue
 
         # Rule 4: Doubtful with null chance → treat as 50/50
         if status == "d" and chance is None:
             scale_factors[idx] = 0.50
-            logger.info(f"Scaled {row['name']} xP by 0.50 (doubtful, chance=null)")
+            logger.debug(f"Scaled {row['name']} xP by 0.50 (doubtful, chance=null)")
             continue
 
         # Rules 5-7: No adjustment needed (chance=100/None with status=a/d)

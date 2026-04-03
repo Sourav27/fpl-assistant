@@ -35,11 +35,30 @@ from src.pipeline.analysis import (
     format_post_match_summary, append_accuracy_log,
 )
 from src.pipeline.features import engineer_features
-from src.pipeline.predict import predict_next_gw, get_feature_columns, save_full_predictions
+from src.pipeline.predict import predict_next_gw, get_feature_columns, save_full_predictions, apply_xp_corrections
 from src.pipeline.availability import filter_availability
 from src.pipeline.optimize import optimize_team
 
 logger = logging.getLogger(__name__)
+
+
+def _score_from_entry_picks(entry_picks: dict) -> int:
+    """Extract the user's actual GW score from FPL entry picks response.
+
+    Uses entry_history.points which already accounts for captain multiplier,
+    auto-subs, VC activation, and bench boost — unlike reconstructing from
+    per-player actual_points sums which miss all of these.
+    """
+    return entry_picks["entry_history"]["points"]
+
+
+def _filter_gw_transfers(rec_df: pd.DataFrame, current_gw: int) -> pd.DataFrame:
+    """Filter recommendation df to current-GW transfers only.
+
+    Prevents future-horizon transfers (e.g. GW32 Walker when analysing GW31)
+    from leaking into post-match recommended squad comparisons.
+    """
+    return rec_df[rec_df["gw"] == current_gw]
 
 
 def _load_cached_bootstrap(target_gw: int | None = None) -> dict | None:
@@ -187,6 +206,15 @@ def phase_predict(target_gw: int | None = None):
         predictions["xP"] = predictions["xP"].fillna(0).clip(lower=0)
         predictions["now_cost"] = latest["now_cost"].fillna(50)
 
+    # Apply xP corrections: blank GW zeroing (A-F4)
+    if bootstrap and target_gw:
+        blank_count_before = (predictions["xP"] > 0).sum()
+        predictions = apply_xp_corrections(predictions, bootstrap, target_gw)
+        blank_count_after = (predictions["xP"] > 0).sum()
+        blanked = blank_count_before - blank_count_after
+        if blanked > 0:
+            print(f"[predict] Zeroed xP for {blanked} blank-GW players")
+
     # Apply availability filtering
     if bootstrap:
         print("[predict] Filtering by player availability...")
@@ -288,26 +316,28 @@ def phase_post_gw():
 
     predictions = pd.read_csv(pred_path)
 
-    # Fetch user picks for this GW
+    # Fetch user picks for this GW — A-F1: your_pts from entry_history.points (correct)
+    entry_picks = None
+    your_pts = 0
+    your_xp = 0.0
+    misses = []
+    your_picks = pd.DataFrame()
+
     try:
-        user_state = fetch_user_team_state(entry_id, gw, bootstrap)
-        picks_elements = set(user_state.current_squad)
+        entry_picks_data = _api_get_with_retry(
+            f"{FPL_ENTRY_URL}/{entry_id}/event/{gw}/picks/"
+        ).json()
+        your_pts = _score_from_entry_picks(entry_picks_data)  # A-F1: captain + auto-subs correct
+        picks_elements = {p["element"] for p in entry_picks_data.get("picks", [])}
         your_picks = predictions[predictions["element"].isin(picks_elements)].copy()
     except Exception as e:
         logger.warning(f"Could not fetch user picks: {e}")
-        your_picks = pd.DataFrame()
 
-    # Merge actual points
     if not live_df.empty and not your_picks.empty:
         actual_map = live_df.set_index("element")["total_points"].to_dict()
         your_picks["actual_points"] = your_picks["element"].map(actual_map).fillna(0)
-        your_pts = int(your_picks["actual_points"].sum())
         your_xp = float(your_picks["xP"].sum())
         misses = compute_prediction_misses(your_picks)
-    else:
-        your_pts = 0
-        your_xp = 0.0
-        misses = []
 
     # Recommended team comparison
     rec_path = RESULTS_DIR / f"recommend_{gw_label}.csv"
@@ -315,8 +345,10 @@ def phase_post_gw():
     recommended_xp = None
     if rec_path.exists() and not live_df.empty:
         rec_df = pd.read_csv(rec_path)
+        # A-F3: filter to current GW only — prevents future-horizon transfers from leaking
+        gw_transfers = _filter_gw_transfers(rec_df, current_gw=gw)
         rec_elements = set(
-            predictions[predictions["name"].isin(rec_df["player_in"].dropna())]["element"]
+            predictions[predictions["name"].isin(gw_transfers["player_in"].dropna())]["element"]
         )
         if rec_elements:
             rec_picks = live_df[live_df["element"].isin(rec_elements)]

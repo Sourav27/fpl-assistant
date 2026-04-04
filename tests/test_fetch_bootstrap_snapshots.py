@@ -251,3 +251,88 @@ class TestLiveMode:
             fbs.live_mode()
 
         assert (snapshots_dir / "bootstrap_gw38.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# _price_change_summary  (E-F1 coverage)
+# ---------------------------------------------------------------------------
+
+def _player(code: int, web_name: str, team_id: int, now_cost: int) -> dict:
+    return {"code": code, "web_name": web_name, "team": team_id, "now_cost": now_cost}
+
+
+def _bs(players: list, teams: list | None = None) -> dict:
+    return {
+        "elements": players,
+        "teams": teams or [{"id": 1, "short_name": "ARS"}],
+    }
+
+
+class TestPriceChangeSummary:
+
+    def test_rise_detected(self):
+        old = _bs([_player(1, "Saka", 1, 100)])
+        new = _bs([_player(1, "Saka", 1, 101)])
+        summary = fbs._price_change_summary(old, new, "test")
+        assert "📈" in summary
+        assert "Saka" in summary
+
+    def test_fall_detected(self):
+        old = _bs([_player(1, "Saka", 1, 101)])
+        new = _bs([_player(1, "Saka", 1, 100)])
+        summary = fbs._price_change_summary(old, new, "test")
+        assert "📉" in summary
+
+    def test_no_changes_returns_no_change_message(self):
+        bs = _bs([_player(1, "Saka", 1, 100)])
+        summary = fbs._price_change_summary(bs, bs, "test")
+        assert "No price changes" in summary
+
+    def test_new_player_entry_detected(self):
+        old = _bs([])
+        new = _bs([_player(99, "NewGuy", 1, 50)])
+        summary = fbs._price_change_summary(old, new, "test")
+        assert "NewGuy" in summary
+
+    def test_removed_player_detected(self):
+        old = _bs([_player(99, "OldGuy", 1, 50)])
+        new = _bs([])
+        summary = fbs._price_change_summary(old, new, "test")
+        assert "OldGuy" in summary
+
+    def test_uses_persistent_code_not_element_id(self):
+        """Same player, different element id → no false price change detected."""
+        old = _bs([_player(code=1001, web_name="Saka", team_id=1, now_cost=100)])
+        new = _bs([_player(code=1001, web_name="Saka", team_id=1, now_cost=100)])
+        summary = fbs._price_change_summary(old, new, "test")
+        assert "No price changes" in summary
+
+
+class TestLiveModeWritesPriceChangesFile:
+
+    def test_writes_price_changes_latest_txt(self, tmp_path):
+        """live_mode() must write price_changes_latest.txt when a previous snapshot exists."""
+        snapshots_dir = tmp_path / "snapshots"
+        snapshots_dir.mkdir()
+
+        old_bootstrap = _bootstrap(current_gw=31, next_gw=32)
+        old_bootstrap["elements"] = [_player(1, "Saka", 1, 100)]
+        old_bootstrap["teams"] = [{"id": 1, "short_name": "ARS"}]
+        (snapshots_dir / "bootstrap_gw32.json").write_text(
+            json.dumps(old_bootstrap), encoding="utf-8"
+        )
+
+        new_bootstrap = _bootstrap(current_gw=32, next_gw=33)
+        new_bootstrap["elements"] = [_player(1, "Saka", 1, 101)]  # price rise
+        new_bootstrap["teams"] = [{"id": 1, "short_name": "ARS"}]
+
+        with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=new_bootstrap), \
+             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir), \
+             patch("fetch_bootstrap_snapshots.PRICE_CHANGES_FILE",
+                   snapshots_dir / "price_changes_latest.txt"):
+            fbs.live_mode()
+
+        price_file = snapshots_dir / "price_changes_latest.txt"
+        assert price_file.exists(), "price_changes_latest.txt was not written"
+        content = price_file.read_text(encoding="utf-8")
+        assert "Saka" in content

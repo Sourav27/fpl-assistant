@@ -574,6 +574,7 @@ def phase_recommend(
         xi_rec_path = RESULTS_DIR / f"xi_recommend_{gw_label}.csv"
         xi_rec.to_csv(xi_rec_path, index=False)
         print(f"Saved post-transfer squad to {squad_rec_path}")
+        print(f"Saved post-transfer XI to {xi_rec_path}")
 
     return plan
 

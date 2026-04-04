@@ -34,7 +34,7 @@ def format_wildcard_xi_block(rows: list[dict], gw: int) -> str:
             continue
         lines.append(f"\n{pos}")
         for r in pos_rows:
-            cap = " (C)" if r["name"] == captain["name"] else ""
+            cap = " (C)" if str(r["element"]) == str(captain["element"]) else ""
             lines.append(f"• {r['name']} ({r['team']}) — {float(r['xP']):.1f} xP{cap}")
     return "\n".join(lines)
 
@@ -79,7 +79,7 @@ def format_my_team_block(
             key=lambda r: float(r["xP"]), reverse=True,
         )
         for r in pos_rows:
-            cap = " (C)" if captain and r["name"] == captain["name"] else ""
+            cap = " (C)" if captain and str(r["element"]) == str(captain["element"]) else ""
             lines.append(f"• {r['name']} ({r['team']}) — {float(r['xP']):.1f} xP{cap}")
 
     # Bench

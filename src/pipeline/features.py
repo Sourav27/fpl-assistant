@@ -29,7 +29,7 @@ def add_rolling_features(
     for col in cols:
         for w in windows:
             df[f"{col}_roll_{w}"] = (
-                df.groupby(player_id)[col]
+                df.groupby([player_id, "season"])[col]
                 .transform(lambda s: s.shift(1).rolling(w, min_periods=w).mean())
             )
     return df

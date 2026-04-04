@@ -25,9 +25,11 @@ class TestPhasePreDeadline:
     def test_saves_bootstrap_snapshot(self, tmp_path, sample_bootstrap_json):
         with patch("src.pipeline.run.fetch_bootstrap", return_value=sample_bootstrap_json), \
              patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
-             patch("src.pipeline.run.RESULTS_DIR", tmp_path / "results"):
+             patch("src.pipeline.run.RESULTS_DIR", tmp_path / "results"), \
+             patch("src.pipeline.run.SNAPSHOTS_DIR", tmp_path / "results" / "snapshots"):
             (tmp_path / "FPL" / "data" / "2025-26" / "gws").mkdir(parents=True)
             (tmp_path / "results").mkdir()
+            (tmp_path / "results" / "snapshots").mkdir(parents=True)
 
             phase_pre_deadline()
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 from src.pipeline.fetch import _api_get_with_retry
-from src.config import FPL_ENTRY_URL, FPL_EVENT_URL, FPL_LEAGUES_CLASSIC_URL
+from src.config import FPL_ENTRY_URL, FPL_LEAGUES_CLASSIC_URL
 
 logger = logging.getLogger(__name__)
 

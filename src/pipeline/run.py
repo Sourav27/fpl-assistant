@@ -11,6 +11,7 @@ Usage:
 import argparse
 import json
 import logging
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,14 +20,14 @@ import pandas as pd
 
 from src.config import (
     VAASTAV_DIR, RESULTS_DIR, MODELS_DIR, CURRENT_SEASON,
-    ACTIVE_MODEL, BOOTSTRAP_MAX_AGE_HOURS,
+    ACTIVE_MODEL, BOOTSTRAP_MAX_AGE_HOURS, SNAPSHOTS_DIR,
     FPL_ENTRY_URL, load_user_config, UserConfigError,
 )
 from src.pipeline.fetch import (
     fetch_bootstrap, get_current_gw, get_next_deadline,
     extract_xp_snapshot, fetch_fixtures, fetch_live_gw_data,
     find_wayback_snapshot, fetch_wayback_bootstrap,
-    _api_get_with_retry,
+    _api_get_with_retry, ELEMENT_TYPE_MAP,
 )
 from src.pipeline.user import fetch_user_team_state
 from src.pipeline.recommend import recommend_transfers, recommend_wildcard, save_recommend_csv
@@ -64,7 +65,7 @@ def _filter_gw_transfers(rec_df: pd.DataFrame, current_gw: int) -> pd.DataFrame:
 
 def _load_cached_bootstrap(target_gw: int | None = None) -> dict | None:
     """Try to load a recent cached bootstrap snapshot."""
-    snapshot_dir = RESULTS_DIR / "snapshots"
+    snapshot_dir = SNAPSHOTS_DIR
     if not snapshot_dir.exists():
         return None
 
@@ -112,9 +113,8 @@ def phase_pre_deadline():
     print(f"[pre-deadline] Saved xP snapshot for GW{next_gw} ({len(xp)} players)")
 
     # Save bootstrap for reference
-    snapshot_dir = RESULTS_DIR / "snapshots"
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
-    with open(snapshot_dir / f"bootstrap_gw{next_gw}.json", "w") as f:
+    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(SNAPSHOTS_DIR / f"bootstrap_gw{next_gw}.json", "w") as f:
         json.dump(bootstrap, f)
     print("[pre-deadline] Saved bootstrap snapshot")
 
@@ -141,7 +141,6 @@ def phase_predict(target_gw: int | None = None):
         latest["now_cost"] = latest.get("value", pd.Series(50, index=latest.index))
 
     # Training cutoff callout — warn if predicting for a GW the model was trained on.
-    import re
     _model_gw_match = re.search(r"gw(\d+)", ACTIVE_MODEL.stem, re.IGNORECASE)
     _training_gw = int(_model_gw_match.group(1)) if _model_gw_match else None
     if _training_gw and target_gw and target_gw <= _training_gw:
@@ -171,9 +170,8 @@ def phase_predict(target_gw: int | None = None):
                         print(f"[predict] Found Wayback snapshot {ts} — downloading...")
                         try:
                             bootstrap = fetch_wayback_bootstrap(ts)
-                            snapshot_dir = RESULTS_DIR / "snapshots"
-                            snapshot_dir.mkdir(parents=True, exist_ok=True)
-                            with open(snapshot_dir / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
+                            SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+                            with open(SNAPSHOTS_DIR / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
                                 json.dump(bootstrap, f)
                             print(f"[predict] Cached Wayback bootstrap as bootstrap_gw{target_gw}.json")
                         except Exception as e:
@@ -189,9 +187,8 @@ def phase_predict(target_gw: int | None = None):
             else:
                 bootstrap = live_bootstrap
                 if target_gw:
-                    snapshot_dir = RESULTS_DIR / "snapshots"
-                    snapshot_dir.mkdir(parents=True, exist_ok=True)
-                    with open(snapshot_dir / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
+                    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+                    with open(SNAPSHOTS_DIR / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
                         json.dump(bootstrap, f)
                     print(f"[predict] Cached live bootstrap as bootstrap_gw{target_gw}.json")
         except Exception as e:
@@ -200,13 +197,12 @@ def phase_predict(target_gw: int | None = None):
     if bootstrap and player_id == "code":
         # Override stale historical metadata (name/position/team/element/cost)
         # with current-season values from the FPL API bootstrap.
-        elem_type_to_pos = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
         team_map = {t["id"]: t["name"] for t in bootstrap.get("teams", [])}
         bs_df = pd.DataFrame([{
             "code": e["code"],
             "element": e["id"],
             "name": e["web_name"],
-            "position": elem_type_to_pos.get(e["element_type"], "MID"),
+            "position": ELEMENT_TYPE_MAP.get(e["element_type"], "MID"),
             "team": team_map.get(e["team"], ""),
             "now_cost": e["now_cost"],
         } for e in bootstrap["elements"]])
@@ -371,7 +367,6 @@ def phase_post_gw():
     predictions = pd.read_csv(pred_path)
 
     # Fetch user picks for this GW — A-F1: your_pts from entry_history.points (correct)
-    entry_picks = None
     your_pts = 0
     your_xp = 0.0
     misses = []

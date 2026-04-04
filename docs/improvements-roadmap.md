@@ -238,17 +238,41 @@ File: `src/pipeline/run.py:phase_retrain()`. Risk: low — drop-in replacement.
 
 ---
 
-### 💡 Track E — Automation & Data Quality
-**Status:** BACKLOG · **Effort:** varies
-**Plan:** Not yet written
+### 💡 Track E — Data Collection Pipeline (NOW FIRST PRIORITY)
+**Status:** BACKLOG · **Effort:** ~1 week
+**Plan:** Not yet written — write plan before starting. See `docs/superpowers/specs/2026-04-04-roadmap-review-and-updates-design.md` Section 4 for full task specs.
 
-| # | ID | What | Why | Effort |
-|---|----|------|-----|--------|
-| 1 | P3a | Pipeline scheduling (cron / GitHub Actions) | Automate weekly cycle — pre-deadline 48h before, post-gw 2h after final whistle | 1 day |
-| 2 | P3b | FBref defensive stats | Tackles, interceptions, blocks improve DEF/MID prediction; currently only `clean_sheets` | 2 days |
-| 3 | P3c | Ensemble predictions (RF + XGBoost) | Averaging models reduces variance; all models already serialised | 0.5 day |
+**Objective:** Validate and integrate new data sources (xG, European minutes, injury signals) before Track B feature engineering starts. Also absorbs Track G Phase 1 (signal collection + feedback logging) — display is Track F's responsibility.
 
-**P3b warning:** FBref aggressively rate-limits scrapers and changes table structure. Consider `understat-client` or commercial data instead.
+#### Scheduling (E-F1 through E-F3)
+
+| ID | What | Effort |
+|----|------|--------|
+| ✅ E-F1 | Shift bootstrap action to 02:00 UTC; Discord price-change notification — **done** (commit 434ef7d). Test: pending. | 0.5 day |
+| E-F2 | Auto-trigger predict + recommend when deadline < 48h; download model from GitHub Releases | 1 day |
+| E-F3 | Document GitHub Releases model promotion workflow in `CLAUDE.md` | 0.5 day |
+
+#### Data Sources (E-F4 through E-F9)
+
+| ID | What | Feeds | Effort |
+|----|------|-------|--------|
+| E-F4 | `understatAPI` — PL xG, xA, xGC per player per GW (EPL only) | Track B `xGC_rolling_4` | 1 day |
+| E-F5 | xG source validation gate — Spearman ρ(understat xG, actual goals) vs ρ(FPL Opta xG, actual goals); log to `results/source_validation.csv` | B-F1b decision | 0.5 day |
+| E-F6 | `soccerdata` + FotMob — European/international minutes; cross-validate against FPL `element-summary` | Track B DGW rotation, Track G Tier 3 | 1 day |
+| E-F7 | FFS RSS parser (`https://www.fantasyfootballscout.co.uk/feed`) → `PlayerSignal` structs; player name resolution with `signal_unresolved.csv` fallback | Track F `GET /api/news` | 0.5 day |
+| E-F8 | Reddit r/FantasyPL JSON API client → `PlayerSignal` structs (24–48h pre-deadline differential buzz) | Track F `GET /api/news` | 0.5 day |
+| E-F9 | premierinjuries.com scraper → `PlayerSignal` structs (`doubt / available / injured`); cross-verify every signal against FPL API `status` | Track F `GET /api/news` | 0.5 day |
+
+#### Signal Feedback Logging (E-F10 — absorbed from Track G Phase 1)
+
+| ID | What | Effort |
+|----|------|--------|
+| E-F10 | When team sheets arrive, log each E-F7/E-F8/E-F9 signal against actual lineup outcome: `results/signal_accuracy.csv` — `{signal_id, source, signal_type, predicted_status, actual_started, gw}` | 0.5 day |
+
+#### Deferred
+
+- **P3b (FBref):** Dropped — FBref aggressively rate-limits and changes table structure. understatAPI covers the same territory more reliably.
+- **P3c (Ensemble predictions):** Deferred until Track B ships. After Track B: 4 RF + 4 XGBoost = 8 models; ensemble averages within each position bucket. Effort: 0.5 day.
 
 ---
 

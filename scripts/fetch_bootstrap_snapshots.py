@@ -181,13 +181,83 @@ def backfill(target_gw: int | None = None) -> None:
     print(f"\nDone. saved={ok}  skipped={skipped}  failed={failed}")
 
 
+def _price_change_summary(old_bootstrap: dict, new_bootstrap: dict, label: str) -> None:
+    """Print a human-readable price change summary between two bootstrap snapshots.
+
+    Uses persistent player ``code`` (not element id) so cross-season additions
+    are detected correctly.
+    """
+    old_players = {p["code"]: p for p in old_bootstrap.get("elements", [])}
+    new_players = {p["code"]: p for p in new_bootstrap.get("elements", [])}
+
+    rises, falls, new_entries, removed = [], [], [], []
+
+    for code, new_p in new_players.items():
+        old_p = old_players.get(code)
+        name = new_p["web_name"]
+        new_cost = new_p["now_cost"]
+        if old_p is None:
+            new_entries.append((name, new_cost / 10.0))
+        else:
+            old_cost = old_p["now_cost"]
+            if new_cost > old_cost:
+                rises.append((name, old_cost / 10.0, new_cost / 10.0, (new_cost - old_cost) / 10.0))
+            elif new_cost < old_cost:
+                falls.append((name, old_cost / 10.0, new_cost / 10.0, (new_cost - old_cost) / 10.0))
+
+    for code, old_p in old_players.items():
+        if code not in new_players:
+            removed.append((old_p["web_name"], old_p["now_cost"] / 10.0))
+
+    total = len(rises) + len(falls) + len(new_entries) + len(removed)
+    print(f"\n=== Price changes: {label} ({total} total) ===")
+
+    if not total:
+        print("  No changes.")
+        return
+
+    if rises:
+        rises.sort(key=lambda x: -x[3])
+        print(f"  Rising ({len(rises)}):")
+        for name, old_c, new_c, delta in rises:
+            print(f"    {name:<22s}  {old_c:.1f}m -> {new_c:.1f}m  (+{delta:.1f}m)")
+
+    if falls:
+        falls.sort(key=lambda x: x[3])
+        print(f"  Falling ({len(falls)}):")
+        for name, old_c, new_c, delta in falls:
+            print(f"    {name:<22s}  {old_c:.1f}m -> {new_c:.1f}m  ({delta:.1f}m)")
+
+    if new_entries:
+        print(f"  New entries ({len(new_entries)}):")
+        for name, cost in new_entries:
+            print(f"    {name:<22s}  {cost:.1f}m (new)")
+
+    if removed:
+        print(f"  Removed ({len(removed)}):")
+        for name, cost in removed:
+            print(f"    {name:<22s}  was {cost:.1f}m")
+
+
 def live_mode() -> None:
-    """Fetch the current live bootstrap and cache it for the current GW."""
+    """Fetch the current live bootstrap and cache it for the current GW.
+
+    Price-change comparison logic
+    ─────────────────────────────
+    Normal days (same next-GW across runs):
+      Compare bootstrap_gwN from the previous run against today's bootstrap.
+
+    Post-deadline transition (next-GW incremented from N to N+1):
+      The deadline has passed between runs. Compare the last pre-deadline
+      snapshot (bootstrap_gwN, still on disk) against today's bootstrap so
+      we can see which prices moved at the GW boundary.
+    """
     try:
         bootstrap = fetch_live_bootstrap()
     except Exception as e:
         print(f"ERROR: Could not fetch live bootstrap: {e}")
         return
+
     current_gw = next(
         (e["id"] for e in bootstrap["events"] if e.get("is_current")), None
     )
@@ -195,8 +265,34 @@ def live_mode() -> None:
         (e["id"] for e in bootstrap["events"] if e.get("is_next")), None
     )
 
-    # Save snapshot for current GW (post-deadline, pre-GW results)
-    # and also for next GW (pre-deadline planning snapshot).
+    # ── Price-change summary (read old files BEFORE overwriting) ────────────
+    if next_gw is not None:
+        same_gw_path = SNAPSHOTS_DIR / f"bootstrap_gw{next_gw}.json"
+        prev_gw_path = SNAPSHOTS_DIR / f"bootstrap_gw{next_gw - 1}.json"
+
+        if same_gw_path.exists():
+            # Normal day: compare today's next GW snapshot with yesterday's.
+            old_bootstrap = json.loads(same_gw_path.read_text(encoding="utf-8"))
+            old_next = next(
+                (e["id"] for e in old_bootstrap["events"] if e.get("is_next")), None
+            )
+            if old_next == next_gw:
+                label = f"GW{next_gw} day-over-day"
+            else:
+                # Edge case: file exists but was written with a different next-GW
+                label = f"GW{old_next} -> GW{next_gw} (deadline transition)"
+            _price_change_summary(old_bootstrap, bootstrap, label)
+
+        elif prev_gw_path.exists():
+            # Deadline just passed: next-GW incremented, new file doesn't exist yet.
+            old_bootstrap = json.loads(prev_gw_path.read_text(encoding="utf-8"))
+            label = f"GW{next_gw - 1} -> GW{next_gw} (deadline transition)"
+            _price_change_summary(old_bootstrap, bootstrap, label)
+
+        else:
+            print(f"\nNo previous snapshot found for GW{next_gw} or GW{next_gw - 1}; skipping price-change summary.")
+
+    # ── Save snapshots for current and next GW ───────────────────────────────
     saved = []
     for gw in filter(None, set([current_gw, next_gw])):
         path = save_snapshot(bootstrap, gw)

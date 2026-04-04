@@ -43,7 +43,7 @@ jobs:
       - name: Notify Discord
         if: always()
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_PRICE_CHANGE_WEBHOOK_URL }}
         run: |
           python - <<'EOF'
           import os, json, requests, datetime
@@ -59,7 +59,8 @@ jobs:
           else:
               summary = "No price change summary generated."
 
-          date_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+          IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+          date_str = datetime.datetime.now(IST).strftime("%Y-%m-%d %H:%M IST")
           content = f"**FPL Price Changes — {date_str}**\n{summary}"
 
           # Discord hard limit: 2000 chars per message

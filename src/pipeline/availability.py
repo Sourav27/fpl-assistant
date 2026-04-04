@@ -1,6 +1,7 @@
 # src/pipeline/availability.py
 """Player availability filtering — hybrid hard-exclude + soft-scale approach."""
 import logging
+import numpy as np
 import pandas as pd
 from src.config import (
     AVAILABILITY_HARD_EXCLUDE_STATUS,
@@ -36,46 +37,35 @@ def filter_availability(
         }
 
     result = predictions.copy()
-    exclude_mask = pd.Series(False, index=result.index)
-    scale_factors = pd.Series(1.0, index=result.index)
 
-    for idx, row in result.iterrows():
-        info = avail_map.get(row["element"])
-        if info is None:
-            continue
+    status_s = result["element"].map(lambda e: avail_map.get(e, {}).get("status", "a"))
+    chance_s = result["element"].map(lambda e: avail_map.get(e, {}).get("chance"))
 
-        status = info["status"]
-        chance = info["chance"]
+    # Rules 1 & 2: hard exclude
+    exclude_mask = (
+        status_s.isin(list(AVAILABILITY_HARD_EXCLUDE_STATUS))
+        | chance_s.isin(list(AVAILABILITY_HARD_EXCLUDE_CHANCE))
+    )
 
-        # Rule 1: Hard exclude by status
-        if status in AVAILABILITY_HARD_EXCLUDE_STATUS:
-            exclude_mask[idx] = True
-            logger.info(f"Excluded {row['name']} (status={status}, news={info['news']})")
-            continue
+    # Rules 3, 4, 5: soft scale — build all conditions with np.select
+    scale_conditions = [
+        *(chance_s == k for k in AVAILABILITY_SOFT_SCALE),
+        (status_s == "d") & chance_s.isna(),  # doubtful + null chance → 50/50
+    ]
+    scale_choices = [*AVAILABILITY_SOFT_SCALE.values(), 0.50]
+    scale_array: np.ndarray = np.select(scale_conditions, scale_choices, default=1.0)
+    scale_factors = pd.Series(scale_array, index=result.index, dtype=float)
 
-        # Rule 2: Hard exclude by chance
-        if chance is not None and chance in AVAILABILITY_HARD_EXCLUDE_CHANCE:
-            exclude_mask[idx] = True
-            logger.info(f"Excluded {row['name']} (chance={chance}%, news={info['news']})")
-            continue
+    if logger.isEnabledFor(logging.INFO):
+        for idx in result.index[exclude_mask]:
+            e = result.at[idx, "element"]
+            info = avail_map.get(e, {})
+            logger.info(f"Excluded {result.at[idx, 'name']} (status={info.get('status')}, news={info.get('news', '')})")
+        for idx in result.index[scale_factors < 1.0]:
+            if not exclude_mask.get(idx, False):
+                logger.info(f"Scaled {result.at[idx, 'name']} xP by {scale_factors[idx]}")
 
-        # Rules 3 & 5: Soft scale by chance (50 → 0.50, 75 → 0.75)
-        if chance is not None and chance in AVAILABILITY_SOFT_SCALE:
-            scale_factors[idx] = AVAILABILITY_SOFT_SCALE[chance]
-            logger.info(f"Scaled {row['name']} xP by {AVAILABILITY_SOFT_SCALE[chance]} (chance={chance}%)")
-            continue
-
-        # Rule 4: Doubtful with null chance → treat as 50/50
-        if status == "d" and chance is None:
-            scale_factors[idx] = 0.50
-            logger.info(f"Scaled {row['name']} xP by 0.50 (doubtful, chance=null)")
-            continue
-
-        # Rules 5-7: No adjustment needed (chance=100/None with status=a/d)
-
-    # Apply exclusions and scaling
     result = result[~exclude_mask].copy()
-    scale_factors = scale_factors[~exclude_mask]
-    result["xP"] = result["xP"] * scale_factors.values
+    result["xP"] = result["xP"].mul(scale_factors)  # type: ignore[arg-type]
 
-    return result.reset_index(drop=True)
+    return result.reset_index(drop=True)  # type: ignore[return-value]

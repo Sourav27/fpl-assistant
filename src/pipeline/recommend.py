@@ -2,10 +2,13 @@
 from __future__ import annotations
 import logging
 from collections import defaultdict
+from pathlib import Path
 
 import pandas as pd
 import pulp
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, value as lp_value
+
+from src.config import SQUAD_RULES
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +95,6 @@ def _recommend_single_gw(
     max_hit_points: int,
 ) -> dict:
     """Single-GW optimiser: find best transfers respecting budget and hit cap."""
-    from src.config import SQUAD_RULES
 
     # Build player pool: current squad + all available players
     current_squad = set(user_state.current_squad)
@@ -130,8 +132,8 @@ def _recommend_single_gw(
         - 4 * hits
     )
 
-    # Squad size = 15
-    prob += lpSum(x) == 15
+    # Squad size
+    prob += lpSum(x) == SQUAD_RULES["squad_size"]
 
     # Transfer continuity: x = in_squad + transfer_in - transfer_out
     for i in range(n):
@@ -193,11 +195,18 @@ def _recommend_single_gw(
     projected_xp = sum(players.iloc[i]["xP"] * (1 + (1 if i == cap_idx else 0))
                        for i in selected)
 
+    # Compute actual post-transfer bank in £M
+    cost_out = sum(selling_prices_01m.get(players.iloc[i]["element"], players.iloc[i]["now_cost"]) for i in outs)
+    cost_in = sum(players.iloc[i]["now_cost"] for i in ins)
+    bank_after = round(bank_pounds + (cost_out - cost_in) / 10, 1)
+
+    hit_cost = hit_count * 4
+    # Return same per-GW structure as _recommend_multi_gw for uniform downstream handling
     return {
-        "transfers": transfers,
+        "transfers": [{"transfers": transfers, "hit_cost": hit_cost, "bank_after": bank_after}],
         "projected_xp": projected_xp,
-        "hit_cost": hit_count * 4,
-        "bank_after": bank_pounds,
+        "hit_cost": hit_cost,
+        "bank_after": bank_after,
         "squad_after": squad_after,
     }
 
@@ -246,7 +255,6 @@ def _recommend_multi_gw(
     Linearises FT carryover with big-M = 20.
     All costs in 0.1M units (FPL convention).
     """
-    from src.config import SQUAD_RULES
 
     players = predictions.reset_index(drop=True)
     n = len(players)
@@ -427,27 +435,26 @@ def recommend_wildcard(
     }
 
 
-def save_recommend_csv(plan: dict, path: "Path", start_gw: int) -> None:
+def save_recommend_csv(plan: dict, path: Path, start_gw: int) -> None:
     """Save transfer plan to CSV.
 
     Columns: gw, action, player_out, player_in, price_out, price_in,
              xp_out, xp_in, hit_cost, bank_after
     """
-    from pathlib import Path as _Path
-
     rows = []
     transfers_by_gw = plan.get("transfers", [])
     for gw_offset, gw_transfers in enumerate(transfers_by_gw):
         gw = start_gw + gw_offset
-        if not gw_transfers:
+        hit_cost = gw_transfers.get("hit_cost", 0)
+        bank_after = gw_transfers.get("bank_after", "")
+        transfers_list = gw_transfers.get("transfers", [])
+        if not transfers_list:
             rows.append({
                 "gw": gw, "action": "hold", "player_out": "", "player_in": "",
                 "price_out": "", "price_in": "", "xp_out": "", "xp_in": "",
-                "hit_cost": gw_transfers.get("hit_cost", 0) if isinstance(gw_transfers, dict) else 0,
-                "bank_after": "",
+                "hit_cost": hit_cost, "bank_after": bank_after,
             })
         else:
-            transfers_list = gw_transfers if isinstance(gw_transfers, list) else gw_transfers.get("transfers", [])
             for t in transfers_list:
                 rows.append({
                     "gw": gw,
@@ -458,10 +465,9 @@ def save_recommend_csv(plan: dict, path: "Path", start_gw: int) -> None:
                     "price_in": t["price_in"],
                     "xp_out": round(t["xp_out"], 1),
                     "xp_in": round(t["xp_in"], 1),
-                    "hit_cost": t.get("hit_cost", 0),
-                    "bank_after": plan.get("bank_after", ""),
+                    "hit_cost": hit_cost,
+                    "bank_after": bank_after,
                 })
 
-    path = _Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(path, index=False)

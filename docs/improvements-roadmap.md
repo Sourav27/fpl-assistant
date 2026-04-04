@@ -2,7 +2,7 @@
 
 > **How to use this file:** Each _Track_ is one initiative — a self-contained batch of work you can ship in a day or a week. Tracks link to detailed plan files. Start a track by opening its plan and following task-by-task instructions. Tracks are ordered by impact/effort ratio.
 
-Last updated: 2026-03-30.
+Last updated: 2026-04-03.
 
 ---
 
@@ -63,6 +63,7 @@ Our current RF global model (MAE 1.035 across all players) is a reasonable start
 | Chip confidence | Chips played with scenario comparison | 0 / 8 | 8 / 8 | Manual review |
 | Hauler prediction | RMSE for players scoring 5+ pts | — | ≤ 5.14 (OpenFPL benchmark) | `retrain` evaluation |
 | Overall MAE | Mean absolute error per player per GW | 1.035 | ≤ best public benchmark | `retrain` evaluation |
+| Spearman ρ | Rank correlation (predicted vs actual pts) | — | ≥ 0.65 (good), ≥ 0.70 (target) | `accuracy_log.csv` |
 | Recommendation reasoning | Transfers include fixture/form/EO rationale | None | Every recommendation | `recommend_gw{N}.csv` |
 
 ### Benchmark context
@@ -205,29 +206,89 @@ def test_gw31_recommended_pts_no_future_leakage(gw31_fixtures):
 
 ---
 
-### 📋 Track B — Model Quality: Understat, Positional Models, Fallback Benchmarking
-**Status:** NOT STARTED · **Effort:** ~2–3 days
-**Plan:** [`docs/superpowers/plans/2026-03-29-track-b-model-quality.md`](superpowers/plans/2026-03-29-track-b-model-quality.md)
+### 📋 Track B — Fixture-Aware Per-Position Models
+**Status:** SPEC READY · **Effort:** ~3–4 days
+**Plan:** Write detailed plan before starting (use `writing-plans` skill)
 
-**Objective:** Improve prediction accuracy by testing better fallback strategies, reviving xG/xA features, and researching per-position models.
+**Objective:** Replace the single global RF model with 4 per-position RF models (GK/DEF/MID/FWD), each trained with fixture-aware features. Switch primary evaluation metric from MAE to Spearman rank correlation (ρ). Handle DGW/BGW with per-fixture prediction and aggregation.
 
-**Success gate:** Each sub-item is only adopted if it lowers MAE on held-out historical GWs. No-regression rule: overall MAE must not worsen.
+**Success gate:** Spearman ρ ≥ 0.65 on held-out GWs (top-200k quality). Secondary: overall MAE must not worsen vs global RF baseline (1.035). Each position model must beat or match the global model for that position's players.
 
-**Tasks (in recommended order):**
+#### Design: Approach C — Per-Position Models
 
-| Task | ID | Description | Effort | Decision gate |
-|------|----|-------------|--------|---------------|
-| 1 | P5 | Fallback strategy benchmarking — test `ep_this` vs `ep_next` vs rolling avg | 2 h | Adopt winner |
-| 2 | P4a | Revive Understat scraper — `src/pipeline/understat.py` | 4 h | Only if DOM works |
-| 3 | P4b | FPL↔Understat player name matching | 2 h | Needed for P4a |
-| 4 | P4c | Integrate xG/xA features into `prepare.py` + `features.py` | 3 h | Only if MAE improves |
-| 5 | P3 | Positional model research notebook | 3 h | Only if MAE improves |
-| — | Final | Test suite + mark roadmap | 1 h | All prior tasks done |
+**Why per-position?** Different positions score points through fundamentally different mechanisms (GKs: saves/CS, FWDs: goals). A global model learns averaged feature weights. Per-position models let `xGC_rolling_4` dominate for GK/DEF while `opponent_form_rolling_6` dominates for MID/FWD. Historical baselines: GK 0.770, DEF 0.910, MID 1.048, FWD 1.249 — the global model (1.035) underperforms GK/DEF positional models.
 
-**Notes:**
-- Start with Task 1 (P5) — fully independent, uses only existing code
-- P4 (Tasks 2–4) requires Understat scraper not to have broken its DOM; may need `playwright`
-- P3 (Task 5) benefits from P4's xG/xA features but can run on existing features first
+**Sample sizes (4 seasons × 38 GWs):** GK ~9k rows, DEF ~18k, MID ~22k, FWD ~14k — all sufficient for RF.
+
+#### New fixture features (all 4 models)
+
+| Feature | Source | What it captures |
+|---------|--------|------------------|
+| `xGC_rolling_4` | Opponent's xGoals Conceded, 4-GW rolling avg | Opponent defensive quality — highest ROI (+0.08–0.15 MAE) |
+| `opponent_form_rolling_6` | Opponent's avg pts allowed to position, 6-GW rolling | Mid-season form shifts |
+| `is_home` | FPL fixture data | Binary venue factor (+0.03–0.06 MAE) |
+| `fixture_count` | Count of fixtures in GW | 0 = BGW, 1 = normal, 2 = DGW |
+| `rest_days` | Days between fixture 1 and fixture 2 (DGW only) | Rotation/fatigue risk for DGW |
+| `is_fixture_2` | Binary — marks second game in DGW | Fatigue decay: model learns lower xMin for second fixture |
+
+#### DGW/BGW handling
+
+**DGW:** Predict xP **per fixture** separately, then sum. For fixture 2, include `rest_days` and `is_fixture_2=1` as features — the model learns that tight turnarounds reduce expected minutes and per-minute output. Replaces the flat 1.8× multiplier.
+
+**BGW:** `fixture_count=0` → `xP = 0`. Handled by the A-F4 xP correction layer (already in pipeline).
+
+#### Config changes
+
+`ACTIVE_MODEL` (single path) → `ACTIVE_MODELS` (dict of 4):
+```python
+ACTIVE_MODELS = {
+    "GK":  MODELS_DIR / "rf_gk_gw{N}.sav",
+    "DEF": MODELS_DIR / "rf_def_gw{N}.sav",
+    "MID": MODELS_DIR / "rf_mid_gw{N}.sav",
+    "FWD": MODELS_DIR / "rf_fwd_gw{N}.sav",
+}
+```
+Fallback per position: if model missing or feature mismatch → `ep_next` for that position's players only. Other positions unaffected.
+
+#### Metric changes
+
+| Priority | Metric | What | Target |
+|----------|--------|------|--------|
+| Primary | **Spearman ρ** | Rank correlation between predicted and actual points | ≥ 0.65 (top 200k); stretch ≥ 0.70 (top 50k) |
+| Secondary | MAE | Mean absolute error per player per GW | ≤ 1.035 (no regression) |
+| Tertiary | Hauler MAE | MAE for players scoring 5+ pts | ≤ 5.14 (OpenFPL benchmark) |
+
+**Why Spearman ρ over MAE:** FPL is a ranking game — you pick 11 from 15, captain from 11, transfer from 500+. Getting the relative order right matters more than the exact number. A model that predicts Salah 8.0 and Saka 7.9 (low MAE) but ranks Saka above Salah when Salah scores 15 is worse than a model with higher MAE that ranks correctly.
+
+#### Tasks
+
+| Task | ID | Description | Files touched | Effort |
+|------|----|-------------|---------------|--------|
+| 1 | B-F1 | Compute `xGC_rolling_4`, `opponent_form_rolling_6` in feature engineering | `features.py` | 3 h |
+| 2 | B-F2 | Join opponent-side data in `prepare.py`: map fixture → opponent team → opponent rolling stats | `prepare.py` | 3 h |
+| 3 | B-F3 | Add `is_home`, `fixture_count`, `rest_days`, `is_fixture_2`; per-fixture prediction + sum for DGW | `predict.py`, `features.py` | 4 h |
+| 4 | B-F4 | Route players by `element_type` to correct position model at prediction time | `predict.py` | 2 h |
+| 5 | B-F5 | `ACTIVE_MODELS` dict in config; per-position fallback to `ep_next` | `config.py`, `predict.py` | 2 h |
+| 6 | B-F6 | `retrain` phase: train 4 models, save with position suffix, print per-position MAE + ρ | `run.py` | 3 h |
+| 7 | B-F7 | Add Spearman ρ to `accuracy_log.csv` (new column); compute in `analysis.py` | `analysis.py`, `run.py` | 2 h |
+| 8 | B-F8 | TDD tests: fixture features, DGW aggregation, position routing, fallback, ρ computation | `tests/` | 4 h |
+
+**Recommended order:** B-F8 (test shells) → B-F1 → B-F2 → B-F5 → B-F4 → B-F3 → B-F6 → B-F7
+
+#### Dependencies & risks
+
+- **B-F1/B-F2 depend on opponent xGC data availability.** vaastav's `teams/` directory has `strength_overall_home/away` but not per-GW xGC. Options: (a) compute from player-level `goals_conceded` aggregated per team per GW (available in vaastav `gws/`), or (b) scrape from Understat. Prefer (a) — no external dependency.
+- **A-F4 xP correction layer must land first** — BGW zeroing and FDR weighting are prerequisites for Track B's fixture features to work correctly end-to-end.
+- **`rest_days` for DGW** requires fixture dates (kickoff times) from the FPL fixtures API. Already fetched in `fetch.py` but not currently parsed for date math.
+
+#### Deferred from old Track B spec
+
+The following items from the original Track B spec are **not included** in this design — they remain valuable but are independent:
+
+| Item | Where it moved | Rationale |
+|------|---------------|-----------|
+| P5: Fallback benchmarking (`ep_this` vs `ep_next` vs rolling avg) | Track C (quick wins) | Independent of model architecture; 2h standalone task |
+| P4a-c: Understat scraper + xG/xA features | Track E (data quality) | High-value features but blocked on Understat DOM stability; can layer onto per-position models later |
 
 ---
 

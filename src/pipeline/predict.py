@@ -59,6 +59,38 @@ def predict_next_gw(
     return result
 
 
+def apply_xp_corrections(
+    predictions: pd.DataFrame,
+    bootstrap: dict,
+    target_gw: int,
+) -> pd.DataFrame:
+    """Apply blank GW zeroing to raw xP predictions.
+
+    Returns dataframe with an added ``raw_xP`` column (original ML output) and a
+    corrected ``xP`` column (zero for blank-GW players).  All downstream consumers
+    (optimizer, recommend.py, analysis.py) should use the corrected ``xP``.
+
+    Blank GW detection uses the bootstrap ``scout_risks`` field which FPL marks
+    explicitly when a player has no fixture in the target gameweek.  This is more
+    reliable than inferring blanks from the fixtures endpoint (which may not be
+    archived) and correctly handles mid-season postponements.
+    """
+    df = predictions.copy()
+    df["raw_xP"] = df["xP"].copy()
+
+    blank_elements = {
+        el["id"]
+        for el in bootstrap.get("elements", [])
+        for risk in el.get("scout_risks", [])
+        if risk.get("property") == "blank_gw" and risk.get("gameweek") == target_gw
+    }
+
+    if blank_elements:
+        df.loc[df["element"].isin(blank_elements), "xP"] = 0.0
+
+    return df
+
+
 def save_full_predictions(predictions: pd.DataFrame, path: Path) -> None:
     """Save full player predictions to CSV.
 
@@ -72,7 +104,7 @@ def save_full_predictions(predictions: pd.DataFrame, path: Path) -> None:
     if "code" not in df.columns:
         df["code"] = df.get("element", pd.Series(dtype=int))
     # now_cost stays in 0.1M units — do NOT divide by 10 here
-    cols = ["element", "code", "name", "position", "team", "xP", "now_cost"]
+    cols = ["element", "code", "name", "position", "team", "xP", "raw_xP", "now_cost"]
     df = df[[c for c in cols if c in df.columns]]
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)

@@ -1,12 +1,16 @@
 element,name,position,team,now_cost,xP,raw_xP
 178,Welbeck,FWD,Brighton,61.0,5.73,5.73
 187,Walker,DEF,Burnley,44.0,7.6,7.6
-373,Virgil,DEF,Liverpool,63.0,6.47,6.47
-449,B.Fernandes,MID,Man Utd,102.0,8.51,8.51
+373,Virgil,DEF,Liverpool,62.0,6.47,6.47
+449,B.Fernandes,MID,Man Utd,101.0,8.51,8.51
 224,Cucurella,DEF,Chelsea,60.0,6.27,6.27
-220,Sánchez,GK,Chelsea,48.0,4.27,4.27
+31,G.Jesus,FWD,Arsenal,64.0,7.1,7.1
+220,Sánchez,GK,Chelsea,49.0,4.27,4.27
+430,Haaland,FWD,Man City,146.0,5.73,5.73
+531,Ballard,DEF,Sunderland,47.0,7.38,7.38
 292,Mykolenko,DEF,Everton,49.0,6.59,6.59
-119,Mbeumo,MID,Man Utd,86.0,6.62,6.62
+82,Semenyo,MID,Man City,83.0,12.04,12.04
+431,Bayindir,GK,Man Utd,47.0,4.21,4.21
 452,Amad,MID,Man Utd,62.0,9.37,9.37
 169,Gomez,MID,Brighton,49.0,7.08,7.08
 163,Hinshelwood,MID,Brighton,51.0,9.81,9.81

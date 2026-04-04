@@ -1,5 +1,39 @@
+import json
+from pathlib import Path
+
 import pytest
 import pandas as pd
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def load_cached_gw_fixtures(gw: int) -> dict:
+    """Load all cached API fixture files for a specific gameweek.
+
+    Sources (see tests/fixtures/gw{N}/ README for provenance):
+      bootstrap.json      — pre-deadline bootstrap-static (Wayback Machine)
+      bootstrap_post.json — post-GW bootstrap-static with final event_points (Wayback Machine)
+      live.json           — per-player GW scores rebuilt from bootstrap_post.event_points
+      entry_picks.json    — entry/{id}/event/{gw}/picks/ (FPL API, fetched once)
+      predictions_raw.csv — raw ML predictions before xP correction (results/predictions_gw{N}.csv)
+      recommend.csv       — transfer recommendations (results/recommend_gw{N}.csv)
+    """
+    gw_dir = FIXTURES_DIR / f"gw{gw}"
+    return {
+        "gw": gw,
+        "bootstrap": json.loads((gw_dir / "bootstrap.json").read_text(encoding="utf-8")),
+        "bootstrap_post": json.loads((gw_dir / "bootstrap_post.json").read_text(encoding="utf-8")),
+        "live": json.loads((gw_dir / "live.json").read_text(encoding="utf-8")),
+        "entry_picks": json.loads((gw_dir / "entry_picks.json").read_text(encoding="utf-8")),
+        "predictions_raw": pd.read_csv(gw_dir / "predictions_raw.csv"),
+        "recommend_df": pd.read_csv(gw_dir / "recommend.csv"),
+    }
+
+
+@pytest.fixture
+def gw31_fixtures():
+    """Real GW31 data from FPL API / Wayback Machine archive."""
+    return load_cached_gw_fixtures(gw=31)
 
 @pytest.fixture
 def sample_bootstrap_json():

@@ -11,6 +11,7 @@ Usage:
 import argparse
 import json
 import logging
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,13 +20,14 @@ import pandas as pd
 
 from src.config import (
     VAASTAV_DIR, RESULTS_DIR, MODELS_DIR, CURRENT_SEASON,
-    ACTIVE_MODEL, BOOTSTRAP_MAX_AGE_HOURS,
+    ACTIVE_MODEL, BOOTSTRAP_MAX_AGE_HOURS, SNAPSHOTS_DIR,
     FPL_ENTRY_URL, load_user_config, UserConfigError,
 )
 from src.pipeline.fetch import (
     fetch_bootstrap, get_current_gw, get_next_deadline,
     extract_xp_snapshot, fetch_fixtures, fetch_live_gw_data,
-    _api_get_with_retry,
+    find_wayback_snapshot, fetch_wayback_bootstrap,
+    _api_get_with_retry, ELEMENT_TYPE_MAP,
 )
 from src.pipeline.user import fetch_user_team_state
 from src.pipeline.recommend import recommend_transfers, recommend_wildcard, save_recommend_csv
@@ -35,23 +37,42 @@ from src.pipeline.analysis import (
     format_post_match_summary, append_accuracy_log,
 )
 from src.pipeline.features import engineer_features
-from src.pipeline.predict import predict_next_gw, get_feature_columns, save_full_predictions
+from src.pipeline.predict import predict_next_gw, get_feature_columns, save_full_predictions, apply_xp_corrections
 from src.pipeline.availability import filter_availability
 from src.pipeline.optimize import optimize_team
 
 logger = logging.getLogger(__name__)
 
 
+def _score_from_entry_picks(entry_picks: dict) -> int:
+    """Extract the user's actual GW score from FPL entry picks response.
+
+    Uses entry_history.points which already accounts for captain multiplier,
+    auto-subs, VC activation, and bench boost — unlike reconstructing from
+    per-player actual_points sums which miss all of these.
+    """
+    return entry_picks["entry_history"]["points"]
+
+
+def _filter_gw_transfers(rec_df: pd.DataFrame, current_gw: int) -> pd.DataFrame:
+    """Filter recommendation df to current-GW transfers only.
+
+    Prevents future-horizon transfers (e.g. GW32 Walker when analysing GW31)
+    from leaking into post-match recommended squad comparisons.
+    """
+    return rec_df[rec_df["gw"] == current_gw]
+
+
 def _load_cached_bootstrap(target_gw: int | None = None) -> dict | None:
     """Try to load a recent cached bootstrap snapshot."""
-    snapshot_dir = RESULTS_DIR / "snapshots"
+    snapshot_dir = SNAPSHOTS_DIR
     if not snapshot_dir.exists():
         return None
 
     if target_gw:
         path = snapshot_dir / f"bootstrap_gw{target_gw}.json"
         if path.exists():
-            return json.loads(path.read_text())
+            return json.loads(path.read_text(encoding="utf-8"))
 
     # Find most recent snapshot
     snapshots = sorted(snapshot_dir.glob("bootstrap_gw*.json"), reverse=True)
@@ -64,7 +85,7 @@ def _load_cached_bootstrap(target_gw: int | None = None) -> dict | None:
         logger.warning(f"Cached bootstrap is {age_hours:.0f}h old (>{BOOTSTRAP_MAX_AGE_HOURS}h), skipping")
         return None
 
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def phase_pre_deadline():
@@ -92,9 +113,8 @@ def phase_pre_deadline():
     print(f"[pre-deadline] Saved xP snapshot for GW{next_gw} ({len(xp)} players)")
 
     # Save bootstrap for reference
-    snapshot_dir = RESULTS_DIR / "snapshots"
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
-    with open(snapshot_dir / f"bootstrap_gw{next_gw}.json", "w") as f:
+    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(SNAPSHOTS_DIR / f"bootstrap_gw{next_gw}.json", "w") as f:
         json.dump(bootstrap, f)
     print("[pre-deadline] Saved bootstrap snapshot")
 
@@ -120,42 +140,91 @@ def phase_predict(target_gw: int | None = None):
     if "now_cost" not in latest.columns:
         latest["now_cost"] = latest.get("value", pd.Series(50, index=latest.index))
 
+    # Training cutoff callout — warn if predicting for a GW the model was trained on.
+    _model_gw_match = re.search(r"gw(\d+)", ACTIVE_MODEL.stem, re.IGNORECASE)
+    _training_gw = int(_model_gw_match.group(1)) if _model_gw_match else None
+    if _training_gw and target_gw and target_gw <= _training_gw:
+        print(
+            f"[predict] NOTE: Model rf_model_gw{_training_gw}.sav was trained through GW{_training_gw}. "
+            f"Predictions for GW{target_gw} use in-sample data — treat results as validation, "
+            f"not genuine out-of-sample forecasts."
+        )
+
     # Load bootstrap for metadata + availability filtering.
-    bootstrap = None
-    if target_gw:
-        bootstrap = _load_cached_bootstrap(target_gw)
-        if bootstrap and player_id == "code":
-            # Override stale historical metadata (name/position/team/element/cost)
-            # with current-season values from the FPL API bootstrap.
-            elem_type_to_pos = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
-            team_map = {t["id"]: t["name"] for t in bootstrap.get("teams", [])}
-            bs_df = pd.DataFrame([{
-                "code": e["code"],
-                "element": e["id"],
-                "name": e["web_name"],
-                "position": elem_type_to_pos.get(e["element_type"], "MID"),
-                "team": team_map.get(e["team"], ""),
-                "now_cost": e["now_cost"],
-            } for e in bootstrap["elements"]])
-            # Drop stale metadata; re-join from bootstrap keyed on persistent code.
-            stale = [c for c in ["element", "name", "position", "team", "now_cost"]
-                     if c in latest.columns]
-            latest = latest.drop(columns=stale).merge(bs_df, on="code", how="left")
-            # Drop players not in current bootstrap (retired / transferred abroad).
-            in_bootstrap = latest["element"].notna()
-            n_excluded = (~in_bootstrap).sum()
-            if n_excluded > 0:
-                print(f"[predict] Excluding {n_excluded} historical players not in current FPL season")
-            latest = latest[in_bootstrap].copy()
-            latest["now_cost"] = latest["now_cost"].fillna(50)
-            latest["position"] = latest["position"].fillna("MID")
-            latest["name"] = latest["name"].fillna("Unknown")
-            latest["team"] = latest["team"].fillna("Unknown")
-            latest["element"] = latest["element"].astype(int)
-        elif bootstrap:
-            # Fallback (no code column): legacy cost-only override by element.
-            cost_map = {e["id"]: e["now_cost"] for e in bootstrap["elements"]}
-            latest["now_cost"] = latest["element"].map(cost_map).fillna(latest["now_cost"])
+    bootstrap = _load_cached_bootstrap(target_gw)
+    if bootstrap is None:
+        print("[predict] No valid cached bootstrap — fetching from live API...")
+        try:
+            live_bootstrap = fetch_bootstrap()
+            live_gw = get_current_gw(live_bootstrap)
+            if target_gw and live_gw and target_gw < live_gw:
+                # Historical GW: live API has wrong squad/cost data. Try Wayback Machine.
+                deadline = next(
+                    (e["deadline_time"] for e in live_bootstrap["events"] if e["id"] == target_gw),
+                    None,
+                )
+                if deadline:
+                    print(f"[predict] GW{target_gw} is historical — searching Wayback Machine for pre-deadline snapshot...")
+                    ts = find_wayback_snapshot(deadline)
+                    if ts:
+                        print(f"[predict] Found Wayback snapshot {ts} — downloading...")
+                        try:
+                            bootstrap = fetch_wayback_bootstrap(ts)
+                            SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+                            with open(SNAPSHOTS_DIR / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
+                                json.dump(bootstrap, f)
+                            print(f"[predict] Cached Wayback bootstrap as bootstrap_gw{target_gw}.json")
+                        except Exception as e:
+                            logger.warning(f"Wayback bootstrap download failed: {e}")
+                    else:
+                        print(
+                            f"[predict] WARNING: No Wayback snapshot found for GW{target_gw} "
+                            f"(deadline {deadline}). Proceeding without bootstrap — "
+                            f"player metadata and blank-GW corrections will be missing."
+                        )
+                else:
+                    print(f"[predict] WARNING: GW{target_gw} not found in live bootstrap events.")
+            else:
+                bootstrap = live_bootstrap
+                if target_gw:
+                    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+                    with open(SNAPSHOTS_DIR / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
+                        json.dump(bootstrap, f)
+                    print(f"[predict] Cached live bootstrap as bootstrap_gw{target_gw}.json")
+        except Exception as e:
+            logger.warning(f"Could not fetch bootstrap from API: {e}. Proceeding without (stale data risk).")
+
+    if bootstrap and player_id == "code":
+        # Override stale historical metadata (name/position/team/element/cost)
+        # with current-season values from the FPL API bootstrap.
+        team_map = {t["id"]: t["name"] for t in bootstrap.get("teams", [])}
+        bs_df = pd.DataFrame([{
+            "code": e["code"],
+            "element": e["id"],
+            "name": e["web_name"],
+            "position": ELEMENT_TYPE_MAP.get(e["element_type"], "MID"),
+            "team": team_map.get(e["team"], ""),
+            "now_cost": e["now_cost"],
+        } for e in bootstrap["elements"]])
+        # Drop stale metadata; re-join from bootstrap keyed on persistent code.
+        stale = [c for c in ["element", "name", "position", "team", "now_cost"]
+                 if c in latest.columns]
+        latest = latest.drop(columns=stale).merge(bs_df, on="code", how="left")
+        # Drop players not in current bootstrap (retired / transferred abroad).
+        in_bootstrap = latest["element"].notna()
+        n_excluded = (~in_bootstrap).sum()
+        if n_excluded > 0:
+            print(f"[predict] Excluding {n_excluded} historical players not in current FPL season")
+        latest = latest[in_bootstrap].copy()
+        latest["now_cost"] = latest["now_cost"].fillna(50)
+        latest["position"] = latest["position"].fillna("MID")
+        latest["name"] = latest["name"].fillna("Unknown")
+        latest["team"] = latest["team"].fillna("Unknown")
+        latest["element"] = latest["element"].astype(int)
+    elif bootstrap:
+        # Fallback (no code column): legacy cost-only override by element.
+        cost_map = {e["id"]: e["now_cost"] for e in bootstrap["elements"]}
+        latest["now_cost"] = latest["element"].map(cost_map).fillna(latest["now_cost"])
 
     print("[predict] Generating predictions...")
     model_path = ACTIVE_MODEL
@@ -186,6 +255,15 @@ def phase_predict(target_gw: int | None = None):
         predictions["xP"] = (latest["xP"] if "xP" in latest.columns else 0)
         predictions["xP"] = predictions["xP"].fillna(0).clip(lower=0)
         predictions["now_cost"] = latest["now_cost"].fillna(50)
+
+    # Apply xP corrections: blank GW zeroing (A-F4)
+    if bootstrap and target_gw:
+        blank_count_before = (predictions["xP"] > 0).sum()
+        predictions = apply_xp_corrections(predictions, bootstrap, target_gw)
+        blank_count_after = (predictions["xP"] > 0).sum()
+        blanked = blank_count_before - blank_count_after
+        if blanked > 0:
+            print(f"[predict] Zeroed xP for {blanked} blank-GW players")
 
     # Apply availability filtering
     if bootstrap:
@@ -288,26 +366,27 @@ def phase_post_gw():
 
     predictions = pd.read_csv(pred_path)
 
-    # Fetch user picks for this GW
+    # Fetch user picks for this GW — A-F1: your_pts from entry_history.points (correct)
+    your_pts = 0
+    your_xp = 0.0
+    misses = []
+    your_picks = pd.DataFrame()
+
     try:
-        user_state = fetch_user_team_state(entry_id, gw, bootstrap)
-        picks_elements = set(user_state.current_squad)
+        entry_picks_data = _api_get_with_retry(
+            f"{FPL_ENTRY_URL}/{entry_id}/event/{gw}/picks/"
+        ).json()
+        your_pts = _score_from_entry_picks(entry_picks_data)  # A-F1: captain + auto-subs correct
+        picks_elements = {p["element"] for p in entry_picks_data.get("picks", [])}
         your_picks = predictions[predictions["element"].isin(picks_elements)].copy()
     except Exception as e:
         logger.warning(f"Could not fetch user picks: {e}")
-        your_picks = pd.DataFrame()
 
-    # Merge actual points
     if not live_df.empty and not your_picks.empty:
         actual_map = live_df.set_index("element")["total_points"].to_dict()
         your_picks["actual_points"] = your_picks["element"].map(actual_map).fillna(0)
-        your_pts = int(your_picks["actual_points"].sum())
         your_xp = float(your_picks["xP"].sum())
         misses = compute_prediction_misses(your_picks)
-    else:
-        your_pts = 0
-        your_xp = 0.0
-        misses = []
 
     # Recommended team comparison
     rec_path = RESULTS_DIR / f"recommend_{gw_label}.csv"
@@ -315,8 +394,10 @@ def phase_post_gw():
     recommended_xp = None
     if rec_path.exists() and not live_df.empty:
         rec_df = pd.read_csv(rec_path)
+        # A-F3: filter to current GW only — prevents future-horizon transfers from leaking
+        gw_transfers = _filter_gw_transfers(rec_df, current_gw=gw)
         rec_elements = set(
-            predictions[predictions["name"].isin(rec_df["player_in"].dropna())]["element"]
+            predictions[predictions["name"].isin(gw_transfers["player_in"].dropna())]["element"]
         )
         if rec_elements:
             rec_picks = live_df[live_df["element"].isin(rec_elements)]

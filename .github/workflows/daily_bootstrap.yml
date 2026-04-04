@@ -1,0 +1,41 @@
+name: Daily FPL Bootstrap Snapshot
+
+on:
+  schedule:
+    # Runs at 08:00 UTC every day — well before any GW deadline (all deadlines
+    # are Sat 11:30 / Tue 18:30 or similar), so the pre-deadline snapshot is
+    # captured before lock-in.
+    - cron: '0 8 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to commit the snapshot
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch live bootstrap snapshot
+        run: python scripts/fetch_bootstrap_snapshots.py --live
+
+      - name: Commit snapshot if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/snapshots/bootstrap_gw*.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: daily bootstrap snapshot $(date -u +%Y-%m-%d)"
+            git push
+          fi

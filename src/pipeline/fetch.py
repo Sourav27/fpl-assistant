@@ -33,9 +33,55 @@ def _api_get_with_retry(url: str, timeout: int = 30) -> requests.Response:
             time.sleep(API_RETRY_BASE_DELAY * (2 ** attempt))
 
 
+WAYBACK_CDX_URL = "https://web.archive.org/cdx/search/cdx"
+WAYBACK_BASE = "https://web.archive.org/web"
+WAYBACK_LOOKBACK_DAYS = 7
+
+
 def fetch_bootstrap() -> dict:
     """Fetch the main FPL bootstrap-static endpoint."""
     return _api_get_with_retry(FPL_BOOTSTRAP_URL).json()
+
+
+def find_wayback_snapshot(deadline_iso: str) -> str | None:
+    """Return the Wayback Machine timestamp of the closest pre-deadline bootstrap.
+
+    Searches [deadline - WAYBACK_LOOKBACK_DAYS, deadline) for a 200-status
+    snapshot. Returns None if no snapshot exists in that window.
+    """
+    from datetime import datetime, timezone, timedelta
+    deadline_dt = datetime.fromisoformat(deadline_iso.replace("Z", "+00:00"))
+    from_dt = deadline_dt - timedelta(days=WAYBACK_LOOKBACK_DAYS)
+    from_str = from_dt.strftime("%Y%m%d%H%M%S")
+    to_str = deadline_dt.strftime("%Y%m%d%H%M%S")
+
+    try:
+        resp = requests.get(WAYBACK_CDX_URL, params={
+            "url": "fantasy.premierleague.com/api/bootstrap-static/",
+            "output": "json",
+            "from": from_str,
+            "to": to_str,
+            "filter": "statuscode:200",
+            "fl": "timestamp",
+            "limit": 50,
+        }, timeout=30)
+        resp.raise_for_status()
+        rows = resp.json()
+    except requests.RequestException as e:
+        logger.warning(f"Wayback CDX query failed: {e}")
+        return None
+
+    if len(rows) <= 1:
+        return None
+    return rows[-1][0]  # last = closest to deadline (CDX is chronological)
+
+
+def fetch_wayback_bootstrap(timestamp: str) -> dict:
+    """Fetch a specific FPL bootstrap-static snapshot from the Wayback Machine."""
+    url = f"{WAYBACK_BASE}/{timestamp}/https://fantasy.premierleague.com/api/bootstrap-static/"
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    return resp.json()
 
 
 def fetch_player_history(player_id: int) -> dict:

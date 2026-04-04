@@ -7,6 +7,7 @@ VAASTAV_DIR = DATA_DIR / "Fantasy-Premier-League"
 RESULTS_DIR = Path("results")
 MODELS_DIR = Path("models")
 PLOTS_DIR = Path("plots")
+SNAPSHOTS_DIR = RESULTS_DIR / "snapshots"
 
 FPL_API_BASE = "https://fantasy.premierleague.com/api"
 FPL_BOOTSTRAP_URL = f"{FPL_API_BASE}/bootstrap-static/"

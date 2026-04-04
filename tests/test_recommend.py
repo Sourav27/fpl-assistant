@@ -243,9 +243,10 @@ class TestSaveRecommendCSV:
         from src.pipeline.recommend import save_recommend_csv
         plan = {
             "transfers": [
-                [{"player_out": "Watkins", "player_in": "Haaland",
+                {"transfers": [{"player_out": "Watkins", "player_in": "Haaland",
                   "price_out": 5.2, "price_in": 7.8, "xp_out": 5.2, "xp_in": 7.8}],
-                [],
+                 "hit_cost": 0, "bank_after": 3.5},
+                {"transfers": [], "hit_cost": 0, "bank_after": 3.5},
             ],
             "projected_xp": 312.4,
             "hit_cost": 0,

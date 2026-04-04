@@ -40,6 +40,108 @@ jobs:
             git push
           fi
 
+      - name: Check deadline proximity
+        id: deadline_check
+        run: |
+          # Find the bootstrap file for the next GW
+          SNAPSHOT=$(ls results/snapshots/bootstrap_gw*.json 2>/dev/null | sort -V | tail -1)
+          if [ -z "$SNAPSHOT" ]; then
+            echo "No snapshot found — skipping deadline check."
+            echo "deadline_approaching=false" >> $GITHUB_OUTPUT
+          else
+            python scripts/check_deadline.py "$SNAPSHOT"
+          fi
+
+      - name: Notify Discord — deadline approaching
+        if: steps.deadline_check.outputs.deadline_approaching == 'true'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_DEADLINE_WEBHOOK_URL }}
+        run: |
+          python - <<'EOF'
+          import os, requests, datetime
+
+          webhook = os.environ.get("DISCORD_WEBHOOK", "").strip()
+          if not webhook:
+              print("DISCORD_DEADLINE_WEBHOOK_URL not set — skipping notification.")
+              exit(0)
+
+          IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+          gw = "${{ steps.deadline_check.outputs.next_gw }}"
+          hours = "${{ steps.deadline_check.outputs.hours_until }}"
+          date_str = datetime.datetime.now(IST).strftime("%Y-%m-%d %H:%M IST")
+          content = (
+              f"**FPL GW{gw} Deadline Alert — {date_str}**\n"
+              f"Deadline in **{hours}h** — running predict + recommend now."
+          )
+          r = requests.post(webhook, json={"content": content}, timeout=10)
+          r.raise_for_status()
+          print(f"Discord notified (HTTP {r.status_code})")
+          EOF
+
+      - name: Download model from GitHub Releases
+        id: model_download
+        if: steps.deadline_check.outputs.deadline_approaching == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p models
+          LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No GitHub Release found — predict/recommend will use ep_next fallback."
+            echo "model_available=false" >> $GITHUB_OUTPUT
+          else
+            echo "Downloading model from release: $LATEST_TAG"
+            gh release download "$LATEST_TAG" --pattern "*.sav" --dir models/ --clobber
+            echo "model_available=true" >> $GITHUB_OUTPUT
+            echo "model_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Write user_config.yaml
+        id: user_config
+        if: steps.deadline_check.outputs.deadline_approaching == 'true'
+        env:
+          USER_CONFIG_YAML: ${{ secrets.USER_CONFIG_YAML }}
+        run: |
+          if [ -z "$USER_CONFIG_YAML" ]; then
+            echo "USER_CONFIG_YAML secret not set — skipping predict/recommend."
+            echo "config_available=false" >> $GITHUB_OUTPUT
+          else
+            printf '%s' "$USER_CONFIG_YAML" > user_config.yaml
+            echo "config_available=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install full pipeline dependencies
+        if: |
+          steps.deadline_check.outputs.deadline_approaching == 'true' &&
+          steps.user_config.outputs.config_available == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Run predict + recommend
+        if: |
+          steps.deadline_check.outputs.deadline_approaching == 'true' &&
+          steps.user_config.outputs.config_available == 'true'
+        run: |
+          GW=${{ steps.deadline_check.outputs.next_gw }}
+          echo "Running predict for GW${GW}..."
+          python -m src.pipeline.run predict --gw "$GW"
+          echo "Running recommend for GW${GW}..."
+          python -m src.pipeline.run recommend --gw "$GW"
+
+      - name: Commit predict/recommend results
+        if: |
+          steps.deadline_check.outputs.deadline_approaching == 'true' &&
+          steps.user_config.outputs.config_available == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/predictions_gw*.csv results/xi_gw*.csv results/squad_gw*.csv results/recommend_gw*.csv || true
+          if git diff --cached --quiet; then
+            echo "No predict/recommend output to commit."
+          else
+            git commit -m "chore: auto predict+recommend GW${{ steps.deadline_check.outputs.next_gw }} ($(date -u +%Y-%m-%d))"
+            git push
+          fi
+
       - name: Notify Discord
         if: always()
         env:

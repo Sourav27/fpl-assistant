@@ -142,6 +142,46 @@ jobs:
             git push
           fi
 
+      - name: Notify Discord — predict/recommend results
+        if: |
+          steps.deadline_check.outputs.deadline_approaching == 'true' &&
+          steps.user_config.outputs.config_available == 'true'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_PREDICT_RECOMMEND_WEBHOOK_URL }}
+        run: |
+          python - <<'EOF'
+          import os, requests, datetime, subprocess, sys
+
+          webhook = os.environ.get("DISCORD_WEBHOOK", "").strip()
+          if not webhook:
+              print("DISCORD_PREDICT_RECOMMEND_WEBHOOK_URL not set — skipping.")
+              sys.exit(0)
+
+          gw = "${{ steps.deadline_check.outputs.next_gw }}"
+          result = subprocess.run(
+              [
+                  sys.executable, "scripts/format_discord_results.py",
+                  f"results/xi_gw{gw}.csv",
+                  f"results/squad_recommend_gw{gw}.csv",
+                  f"results/xi_recommend_gw{gw}.csv",
+                  f"results/recommend_gw{gw}.csv",
+                  gw,
+              ],
+              capture_output=True, text=True,
+          )
+          body = result.stdout.strip() or "No predict/recommend output found."
+
+          IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+          date_str = datetime.datetime.now(IST).strftime("%Y-%m-%d %H:%M IST")
+          content = f"**FPL GW{gw} — {date_str}**\n\n{body}"
+          if len(content) > 2000:
+              content = content[:1990] + "\n… (truncated)"
+
+          r = requests.post(webhook, json={"content": content}, timeout=10)
+          r.raise_for_status()
+          print(f"Discord results sent (HTTP {r.status_code})")
+          EOF
+
       - name: Notify Discord
         if: always()
         env:

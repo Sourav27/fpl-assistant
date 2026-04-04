@@ -561,6 +561,20 @@ def phase_recommend(
     save_recommend_csv(plan, out_path, start_gw=target_gw or 0)
     print(f"\nSaved to {out_path}")
 
+    # Save post-transfer squad and XI for Discord notification
+    squad_after_ids = plan.get("squad_after", [])
+    if squad_after_ids:
+        from src.pipeline.optimize import select_xi
+        squad_rec = predictions[predictions["element"].isin(squad_after_ids)][
+            ["element", "name", "position", "team", "now_cost", "xP"]
+        ].reset_index(drop=True)
+        squad_rec_path = RESULTS_DIR / f"squad_recommend_{gw_label}.csv"
+        squad_rec.to_csv(squad_rec_path, index=False)
+        xi_rec = select_xi(squad_rec)
+        xi_rec_path = RESULTS_DIR / f"xi_recommend_{gw_label}.csv"
+        xi_rec.to_csv(xi_rec_path, index=False)
+        print(f"Saved post-transfer squad to {squad_rec_path}")
+
     return plan
 
 

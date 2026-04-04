@@ -181,11 +181,14 @@ def backfill(target_gw: int | None = None) -> None:
     print(f"\nDone. saved={ok}  skipped={skipped}  failed={failed}")
 
 
-def _price_change_summary(old_bootstrap: dict, new_bootstrap: dict, label: str) -> None:
-    """Print a human-readable price change summary between two bootstrap snapshots.
+PRICE_CHANGES_FILE = SNAPSHOTS_DIR / "price_changes_latest.txt"
+
+
+def _price_change_summary(old_bootstrap: dict, new_bootstrap: dict, label: str) -> str:
+    """Build a human-readable price change summary between two bootstrap snapshots.
 
     Uses persistent player ``code`` (not element id) so cross-season additions
-    are detected correctly.
+    are detected correctly.  Returns the summary as a string (caller prints/saves it).
     """
     old_players = {p["code"]: p for p in old_bootstrap.get("elements", [])}
     new_players = {p["code"]: p for p in new_bootstrap.get("elements", [])}
@@ -210,33 +213,35 @@ def _price_change_summary(old_bootstrap: dict, new_bootstrap: dict, label: str) 
             removed.append((old_p["web_name"], old_p["now_cost"] / 10.0))
 
     total = len(rises) + len(falls) + len(new_entries) + len(removed)
-    print(f"\n=== Price changes: {label} ({total} total) ===")
+    lines = [f"=== Price changes: {label} ({total} total) ==="]
 
     if not total:
-        print("  No changes.")
-        return
+        lines.append("  No changes.")
+        return "\n".join(lines)
 
     if rises:
         rises.sort(key=lambda x: -x[3])
-        print(f"  Rising ({len(rises)}):")
+        lines.append(f"  Rising ({len(rises)}):")
         for name, old_c, new_c, delta in rises:
-            print(f"    {name:<22s}  {old_c:.1f}m -> {new_c:.1f}m  (+{delta:.1f}m)")
+            lines.append(f"    {name:<22s}  {old_c:.1f}m -> {new_c:.1f}m  (+{delta:.1f}m)")
 
     if falls:
         falls.sort(key=lambda x: x[3])
-        print(f"  Falling ({len(falls)}):")
+        lines.append(f"  Falling ({len(falls)}):")
         for name, old_c, new_c, delta in falls:
-            print(f"    {name:<22s}  {old_c:.1f}m -> {new_c:.1f}m  ({delta:.1f}m)")
+            lines.append(f"    {name:<22s}  {old_c:.1f}m -> {new_c:.1f}m  ({delta:.1f}m)")
 
     if new_entries:
-        print(f"  New entries ({len(new_entries)}):")
+        lines.append(f"  New entries ({len(new_entries)}):")
         for name, cost in new_entries:
-            print(f"    {name:<22s}  {cost:.1f}m (new)")
+            lines.append(f"    {name:<22s}  {cost:.1f}m (new)")
 
     if removed:
-        print(f"  Removed ({len(removed)}):")
+        lines.append(f"  Removed ({len(removed)}):")
         for name, cost in removed:
-            print(f"    {name:<22s}  was {cost:.1f}m")
+            lines.append(f"    {name:<22s}  was {cost:.1f}m")
+
+    return "\n".join(lines)
 
 
 def live_mode() -> None:
@@ -266,12 +271,12 @@ def live_mode() -> None:
     )
 
     # ── Price-change summary (read old files BEFORE overwriting) ────────────
+    summary: str | None = None
     if next_gw is not None:
         same_gw_path = SNAPSHOTS_DIR / f"bootstrap_gw{next_gw}.json"
         prev_gw_path = SNAPSHOTS_DIR / f"bootstrap_gw{next_gw - 1}.json"
 
         if same_gw_path.exists():
-            # Normal day: compare today's next GW snapshot with yesterday's.
             old_bootstrap = json.loads(same_gw_path.read_text(encoding="utf-8"))
             old_next = next(
                 (e["id"] for e in old_bootstrap["events"] if e.get("is_next")), None
@@ -279,18 +284,21 @@ def live_mode() -> None:
             if old_next == next_gw:
                 label = f"GW{next_gw} day-over-day"
             else:
-                # Edge case: file exists but was written with a different next-GW
                 label = f"GW{old_next} -> GW{next_gw} (deadline transition)"
-            _price_change_summary(old_bootstrap, bootstrap, label)
+            summary = _price_change_summary(old_bootstrap, bootstrap, label)
 
         elif prev_gw_path.exists():
-            # Deadline just passed: next-GW incremented, new file doesn't exist yet.
             old_bootstrap = json.loads(prev_gw_path.read_text(encoding="utf-8"))
             label = f"GW{next_gw - 1} -> GW{next_gw} (deadline transition)"
-            _price_change_summary(old_bootstrap, bootstrap, label)
+            summary = _price_change_summary(old_bootstrap, bootstrap, label)
 
         else:
-            print(f"\nNo previous snapshot found for GW{next_gw} or GW{next_gw - 1}; skipping price-change summary.")
+            summary = f"No previous snapshot found for GW{next_gw} or GW{next_gw - 1}; skipping price-change summary."
+
+    if summary:
+        print(f"\n{summary}")
+        SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+        PRICE_CHANGES_FILE.write_text(summary, encoding="utf-8")
 
     # ── Save snapshots for current and next GW ───────────────────────────────
     saved = []

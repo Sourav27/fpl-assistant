@@ -2,10 +2,10 @@ name: Daily FPL Bootstrap Snapshot
 
 on:
   schedule:
-    # Runs at 08:00 UTC every day — well before any GW deadline (all deadlines
-    # are Sat 11:30 / Tue 18:30 or similar), so the pre-deadline snapshot is
-    # captured before lock-in.
-    - cron: '0 8 * * *'
+    # 02:00 UTC = 07:30 IST. FPL prices reset ~07:00 IST, so this captures
+    # the first post-reset snapshot. GW deadlines (earliest Sat 11:30 UTC)
+    # are well after this window.
+    - cron: '0 2 * * *'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
@@ -39,3 +39,37 @@ jobs:
             git commit -m "chore: daily bootstrap snapshot $(date -u +%Y-%m-%d)"
             git push
           fi
+
+      - name: Notify Discord
+        if: always()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python - <<'EOF'
+          import os, json, requests, datetime
+
+          webhook = os.environ.get("DISCORD_WEBHOOK", "").strip()
+          if not webhook:
+              print("DISCORD_WEBHOOK_URL secret not set — skipping notification.")
+              exit(0)
+
+          summary_path = "results/snapshots/price_changes_latest.txt"
+          if os.path.exists(summary_path):
+              summary = open(summary_path, encoding="utf-8").read().strip()
+          else:
+              summary = "No price change summary generated."
+
+          date_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+          header = f"**FPL Price Changes — {date_str}**"
+
+          # Discord code block; hard limit 2000 chars per message
+          body = f"```\n{summary}\n```"
+          if len(header) + len(body) + 1 > 2000:
+              max_summary = 2000 - len(header) - 10  # 10 = code fences + newline + margin
+              body = f"```\n{summary[:max_summary]}\n… (truncated)\n```"
+
+          payload = {"content": f"{header}\n{body}"}
+          r = requests.post(webhook, json=payload, timeout=10)
+          r.raise_for_status()
+          print(f"Discord notification sent (HTTP {r.status_code})")
+          EOF

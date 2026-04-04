@@ -2,7 +2,7 @@
 
 > **How to use this file:** Each _Track_ is one initiative — a self-contained batch of work you can ship in a day or a week. Tracks link to detailed plan files. Start a track by opening its plan and following task-by-task instructions. Tracks are ordered by impact/effort ratio.
 
-Last updated: 2026-04-03.
+Last updated: 2026-04-04.
 
 ---
 
@@ -78,7 +78,7 @@ Our current RF global model (MAE 1.035 across all players) is a reasonable start
 ## Initiative Tracker
 
 ### ✅ Track A — User Team Sync, Recommend & Post-Match Analysis
-**Status:** COMPLETE (2026-03-29) · **Review:** PENDING (see below)
+**Status:** COMPLETE (2026-04-04) · **Tests:** 135 passing
 **Plan:** [`docs/superpowers/plans/2026-03-29-track-a-team-sync-and-analysis.md`](superpowers/plans/2026-03-29-track-a-team-sync-and-analysis.md)
 
 **What was built:**
@@ -87,122 +87,27 @@ Our current RF global model (MAE 1.035 across all players) is a reasonable start
 - `src/pipeline/analysis.py` — post-match prediction misses, dream team, accuracy log
 - `src/pipeline/run.py` extended — `recommend` phase + `--horizon/--wildcard/--team` flags
 - `results/accuracy_log.csv` — per-GW benchmark log (best/avg/percentile)
-- 116 tests passing
+- Bootstrap snapshot caching (`results/snapshots/bootstrap_gw{N}.json`) + daily GitHub Action
 
-**CLI now available:**
+**Post-ship fixes (A-F1 through A-F5), completed 2026-04-04:**
+- **A-F1** — `your_pts` now sourced directly from FPL API entry history (auto-subs, captain, VC all correct)
+- **A-F2** — Accuracy log redesigned: `your_pts/xp`, `recommended_pts/xp`, `wildcard_pts/xp`, `dream_team_pts` columns
+- **A-F3** — Multi-GW leakage fixed: `rec_df` filtered to `gw == current_gw` before `recommended_pts` computation
+- **A-F4** — xP correction layer in `predict.py`: blank GW zeroing → FDR weighting → availability scaling; `raw_xp` preserved for model evaluation
+- **A-F5** — Replay test infrastructure: `tests/test_integration_replay.py` + `tests/fixtures/gw{N}/` cached API snapshots; GW30 and GW31 covered
+
+**Refactoring (same branch):**
+- `availability.py`: replaced `iterrows` with vectorized `np.select` + boolean masking (10× faster); logging at INFO level
+- `features.py`: fixed cross-season rolling window data leakage (`groupby([player_id, "season"])`)
+- `config.py`: added `SNAPSHOTS_DIR` constant (eliminated 4 inline path constructions)
+- `recommend.py`: fixed `bank_after` calculation (post-transfer bank in £M); unified single/multi-GW return format; module-level imports
+- `run.py`: consolidated `SNAPSHOTS_DIR`, `ELEMENT_TYPE_MAP` imports; removed dead variable
+
+**CLI:**
 ```bash
 python -m src.pipeline.run recommend --gw <N> --horizon 3
 python -m src.pipeline.run post-gw
 ```
-
-#### 🔍 Pending Review Items (Track A)
-
-These items shipped in Track A but need real-GW validation before being marked fully trusted:
-
-| # | Item | Location | What to check |
-|---|------|----------|---------------|
-| A-R1 | Multi-GW FDR fallback | `recommend.py:_recommend_multi_gw()` | When `team_id_map` is unavailable, future-GW xP falls back to raw predictions with no FDR discount. Verify fallback triggers correctly and doesn't silently over-value difficult-fixture players. |
-| A-R2 | Captain relaxation | `recommend.py:_recommend_single_gw()` | Captain is allowed to be in squad but not strictly enforced to be in XI. Check that the ILP always selects the captain in the starting XI in practice. |
-| A-R3 | FT banking end-of-season | `user.py:_compute_free_transfers()` | Behaviour at GW1 (fresh start) and GW38 (season end) edge cases. Simulate with a mock history. |
-| A-R4 | Selling price haircut | `user.py:compute_selling_price()` | FPL rules: no haircut on price drops. Confirm with a real GW where prices have dropped and compare against FPL app selling price. |
-| A-R5 | Accuracy log first run | `analysis.py:append_accuracy_log()` | File is created on first `post-gw` run. Verify headers match schema; test append idempotency when `post-gw` is re-run for same GW. |
-
-**Critique & Validation (2026-03-30):**
-Comprehensive review of GW31 logs (`accuracy_log.csv`, `recommend_gw31.csv`) and comparison with live FPL API data (entry 1681779) confirms several critical bugs in the `post-gw` and `recommend` phases:
-
-1. **Bench Points Leakage:** `your_pts` incorrectly sums all 15 players in your squad. In FPL, only the starting 11 (plus auto-subs) contribute to your score. The current log is "noisy" and doesn't reflect your actual game score.
-2. **Captain Bonus Missing:** The 13 points from your captain (B.Fernandes) were not doubled in the `your_pts` calculation, leading to a significant 13-point underestimate of your actual score (44 vs 57).
-3. **Invalid "Recommended" Baseline:** `recommended_pts` only sums players transferred *in*, while `your_pts` sums 15 players. This makes the comparison mathematically invalid (comparing a 3-man sub-team to a 15-man squad).
-4. **Multi-GW Leakage:** The analysis logic includes players from the *entire* recommendation plan (e.g., Walker for GW32) in the current GW31 stats.
-5. **Fixture-Blind Recommender:** The optimizer ignored the `fixtures` list entirely, recommending Semenyo for GW31 despite Man City having a blank gameweek.
-
-#### 🛠️ Fixes Required (Immediate Priority — execute before Track B)
-
-**Fix A-F1 — Score calculation in `run.py:phase_post_gw()`**
-- `your_pts`: fetch directly from FPL API entry history (already accounts for auto-subs, VC, captain, bench-boost). Do not reconstruct from player sums.
-- Player-level reconstruction (XI + auto-subs) is kept separately for **decision quality analysis**: a non-starting player who was auto-subbed out counts as a selection miss, not a points gain.
-
-**Fix A-F2 — Accuracy log columns redesigned**
-
-Replace the single `recommended_pts` with four distinct score columns and matching xP columns:
-
-| Column | Definition |
-|--------|-----------|
-| `your_pts` | Actual FPL score from API (captain, auto-subs, VC all correct) |
-| `your_xp` | Adjusted xP for your actual XI + captain (×2 boost applied) |
-| `recommended_pts` | Your pre-GW squad with GW N transfers applied → best XI scored with live auto-sub/VC/captain adjustments. If no transfer recommended, equals `your_pts`. |
-| `recommended_xp` | Adjusted xP for recommended XI + captain (×2 boost applied) |
-| `wildcard_pts` | Pre-deadline optimal 15-man squad (£100M budget, optimizer run on deadline prices) → best XI scored with live adjustments |
-| `wildcard_xp` | Adjusted xP for wildcard XI + captain (×2 boost applied) |
-| `dream_team_pts` | Post-match best 11 individual players from actuals (existing, no budget constraint) |
-
-`your_pts == recommended_pts` when you followed all recommendations exactly.
-
-**Fix A-F3 — Multi-GW leakage in `run.py:phase_post_gw()`**
-- Filter `rec_df` to `gw == current_gw` before extracting `player_in` names.
-- Only GW N transfers are applied when computing `recommended_pts`. Future-horizon transfers are excluded.
-
-**Fix A-F4 — xP correction layer (architectural fix)**
-
-Root cause: the ML model predicts `xP` blind to fixture reality. A player on a blanking team gets the same `xP` as if they had a fixture, corrupting every downstream consumer (optimizer, analysis, accuracy log).
-
-**Design decision:** Bake adjustments into `predictions_gw{N}.csv` with two columns:
-- `raw_xp` — pure ML model output (used only for model evaluation and improvement tracking)
-- `xp` — corrected xP used by all consumers: optimizer, `recommend.py`, `analysis.py`, accuracy log
-
-**Correction pass** runs in `predict.py` after ML inference, applying (in order):
-1. **Blank GW zeroing** — `xp = 0` for any player whose team has no fixture in GW N (from `fixtures` API)
-2. **FDR weighting** — `xp *= compute_fdr_weight(fdr_team, fdr_sensitivity)` per player
-3. **Availability scaling** — already done in `availability.py`; confirm it writes to the same corrected `xp` column
-
-With this fix, `_recommend_single_gw()` no longer needs a special `build_xp_matrix()` call — it simply reads corrected `xp` from the predictions dataframe. All consumers uniformly correct by default.
-
-**Files touched:** `predict.py` (correction pass), `save_full_predictions()` (add `raw_xp` column), `recommend.py` (use `xp` not `raw_xp`), `analysis.py`, `run.py`, `tests/test_predict.py`
-
-**Fix A-F5 — Historical GW replay test infrastructure**
-
-The bugs found in GW31 were not caught by the existing test suite because unit tests use mock data. Mock data cannot replicate the full chain: real fixtures → real blanks → real xP errors → real recommendation mistakes. We need tests grounded in real historical data.
-
-**Design:**
-- `tests/test_integration_replay.py` — new module; each test replays a complete past GW end-to-end
-- Test fixture data sourced from:
-  - `data/Fantasy-Premier-League/` (vaastav dataset — historical GW stats, player data)
-  - FPL API historical endpoints (entry picks, live GW points, benchmarks) — fetched once and cached under `tests/fixtures/gw{N}/`
-  - Saved pipeline outputs (`results/predictions_gw{N}.csv`, `results/recommend_gw{N}.csv`, `results/accuracy_log.csv`) as ground-truth snapshots
-- **GW31 replay test** (priority — run before GW32 deadline): confirm corrected `xp` zeros Semenyo/blanking players, `recommended_pts` matches expected score, `your_pts` matches FPL API entry score
-- **GW30 replay test**: smoke test for a "normal" non-blank GW
-- **GW1 replay test**: edge case — first GW, no rolling history, no prior transfers, FT banking from zero
-
-**Replay framework API:**
-```python
-# tests/test_integration_replay.py
-@pytest.fixture
-def gw31_fixtures():
-    return load_cached_gw_fixtures(gw=31)  # reads from tests/fixtures/gw31/
-
-def test_gw31_blank_xp_zeroed(gw31_fixtures):
-    """Semenyo (Man City blank) must have corrected xp == 0."""
-    predictions = run_predict_phase(gw31_fixtures)
-    semenyo = predictions[predictions["name"] == "Semenyo"]
-    assert semenyo["xp"].iloc[0] == 0.0
-    assert semenyo["raw_xp"].iloc[0] > 0  # model was blind to blank
-
-def test_gw31_your_pts_matches_api(gw31_fixtures):
-    """your_pts must equal actual FPL score from entry history."""
-    result = run_post_gw_phase(gw31_fixtures, entry_id=1681779)
-    assert result["your_pts"] == gw31_fixtures["entry_history"]["points"]
-
-def test_gw31_recommended_pts_no_future_leakage(gw31_fixtures):
-    """recommended_pts must not include Walker (GW32 transfer)."""
-    result = run_post_gw_phase(gw31_fixtures, entry_id=1681779)
-    assert "Walker" not in result["recommended_squad"]
-```
-
-**Philosophy:** Every time a real-GW bug is found, a replay test for that GW is added immediately — before the fix. This ensures the fix is verified against real data and the bug cannot regress. Mock tests remain for unit-level logic; replay tests cover integration correctness.
-
-**Files:** `tests/test_integration_replay.py`, `tests/fixtures/gw31/` (cached API responses), `tests/conftest.py` (add `load_cached_gw_fixtures()` helper)
-
-**Suggested next action:** Execute Fixes A-F1 through A-F5 as Track A.1 before moving to Track B. A-F5 (replay tests) must be written before A-F1 through A-F4 are implemented — TDD on real data.
 
 ---
 

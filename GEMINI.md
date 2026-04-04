@@ -36,10 +36,10 @@ fpl-assistant/
 │       └── run.py          # CLI entry point (4 phases)
 ├── tests/              # pytest unit + integration tests (64 tests)
 ├── scripts/
-│   └── weekly_run.sh   # Cron-friendly wrapper with timestamped logs
+│   └── fetch_bootstrap_snapshots.py  # Called by GitHub Actions daily_bootstrap.yml
 ├── models/             # Trained .sav files — git-ignored; regenerate via retrain
 ├── results/            # Output CSVs (xi_gwN.csv, squad_gwN.csv, snapshots/)
-├── logs/               # weekly_run.sh output — git-ignored
+├── logs/               # Local run output — git-ignored
 ├── requirements.txt
 └── .gitignore
 ```

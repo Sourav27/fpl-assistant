@@ -43,11 +43,11 @@ fpl-assistant/
 │       └── run.py               # CLI entry point (6 phases)
 ├── tests/                   # pytest unit + integration tests (115 tests)
 ├── scripts/
-│   └── weekly_run.sh        # Cron-friendly wrapper with timestamped logs
+│   └── fetch_bootstrap_snapshots.py  # Called by GitHub Actions daily_bootstrap.yml
 ├── models/                  # Trained .sav files — git-ignored; regenerate via retrain
 ├── results/                 # Output CSVs (xi_gwN.csv, squad_gwN.csv, predictions_gwN.csv,
 │                            #              recommend_gwN.csv, accuracy_log.csv, snapshots/)
-├── logs/                    # weekly_run.sh output — git-ignored
+├── logs/                    # Local run output — git-ignored
 ├── user_config.example.yaml # Template — copy to user_config.yaml and fill in entry_id
 ├── user_config.yaml         # User team IDs & preferences (git-ignored, required for recommend/post-gw analysis)
 ├── requirements.txt

@@ -105,14 +105,6 @@ The `recommend` phase reads `user_config.yaml` (copy from `user_config.example.y
 
 The `post-gw` phase (when `user_config.yaml` is present) prints a post-match summary comparing your team vs the recommended team vs the dream XI, and appends a row to `results/accuracy_log.csv`.
 
-**Using the cron wrapper (Linux/macOS/WSL):**
-
-```bash
-chmod +x scripts/weekly_run.sh
-./scripts/weekly_run.sh pre-deadline   # logs to logs/pre-deadline_<timestamp>.log
-./scripts/weekly_run.sh predict --gw 32
-```
-
 ### GW32–38 Calendar
 
 | GW | Deadline (UTC) |

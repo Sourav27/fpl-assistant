@@ -106,6 +106,33 @@ ACTIVE_MODEL = MODELS_DIR / "rf_model_gw<N>.sav"
 ```
 If the model file is missing or has mismatched feature names, the pipeline automatically falls back to FPL API `ep_next` values.
 
+### Model Promotion via GitHub Releases
+
+The daily GitHub Actions workflow downloads the model from the latest GitHub Release before running predict. To promote a newly retrained model:
+
+```bash
+# 1. Retrain locally
+python -m src.pipeline.run retrain --gw <N>
+
+# 2. Create a GitHub Release with the model as an asset
+gh release create "gw<N>" models/rf_model_gw<N>.sav \
+  --title "Model GW<N>" \
+  --notes "Retrained after GW<N> with <M> seasons of data."
+
+# 3. Update ACTIVE_MODEL in src/config.py for local runs
+# ACTIVE_MODEL = MODELS_DIR / "rf_model_gw<N>.sav"
+```
+
+The workflow downloads all `*.sav` assets from the latest release tagged `gw*`. The release tag must start with `gw` (e.g., `gw34`, `gw35`). `gh release list` returns releases in reverse chronological order — the first result is used.
+
+**Secrets required (set in GitHub repo → Settings → Secrets):**
+- `DISCORD_PRICE_CHANGE_WEBHOOK_URL` — daily price-change notifications (rename from `DISCORD_WEBHOOK_URL`)
+- `DISCORD_DEADLINE_WEBHOOK_URL` — deadline approaching alert
+- `DISCORD_PREDICT_RECOMMEND_WEBHOOK_URL` — predict + recommend results summary
+- `USER_CONFIG_YAML` — full contents of `user_config.yaml` (required for predict/recommend auto-trigger)
+
+**Migration note:** The existing `DISCORD_WEBHOOK_URL` secret must be renamed to `DISCORD_PRICE_CHANGE_WEBHOOK_URL` in GitHub repo settings, or the price-change step will silently skip.
+
 ### Running Tests
 
 ```bash

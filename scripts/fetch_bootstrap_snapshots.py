@@ -185,61 +185,65 @@ PRICE_CHANGES_FILE = SNAPSHOTS_DIR / "price_changes_latest.txt"
 
 
 def _price_change_summary(old_bootstrap: dict, new_bootstrap: dict, label: str) -> str:
-    """Build a human-readable price change summary between two bootstrap snapshots.
+    """Build a Discord-formatted price change summary between two bootstrap snapshots.
 
     Uses persistent player ``code`` (not element id) so cross-season additions
     are detected correctly.  Returns the summary as a string (caller prints/saves it).
     """
     old_players = {p["code"]: p for p in old_bootstrap.get("elements", [])}
     new_players = {p["code"]: p for p in new_bootstrap.get("elements", [])}
+    team_map = {t["id"]: t["short_name"] for t in new_bootstrap.get("teams", [])}
+    old_team_map = {t["id"]: t["short_name"] for t in old_bootstrap.get("teams", [])}
 
     rises, falls, new_entries, removed = [], [], [], []
 
     for code, new_p in new_players.items():
         old_p = old_players.get(code)
-        name = new_p["web_name"]
+        team = team_map.get(new_p["team"], "???")
+        name = f"{new_p['web_name']} ({team})"
         new_cost = new_p["now_cost"]
         if old_p is None:
             new_entries.append((name, new_cost / 10.0))
         else:
             old_cost = old_p["now_cost"]
             if new_cost > old_cost:
-                rises.append((name, old_cost / 10.0, new_cost / 10.0, (new_cost - old_cost) / 10.0))
+                rises.append((name, old_cost / 10.0, new_cost / 10.0))
             elif new_cost < old_cost:
-                falls.append((name, old_cost / 10.0, new_cost / 10.0, (new_cost - old_cost) / 10.0))
+                falls.append((name, old_cost / 10.0, new_cost / 10.0))
 
     for code, old_p in old_players.items():
         if code not in new_players:
-            removed.append((old_p["web_name"], old_p["now_cost"] / 10.0))
+            team = old_team_map.get(old_p["team"], "???")
+            removed.append((f"{old_p['web_name']} ({team})", old_p["now_cost"] / 10.0))
 
     total = len(rises) + len(falls) + len(new_entries) + len(removed)
-    lines = [f"=== Price changes: {label} ({total} total) ==="]
+    lines = [label]
 
     if not total:
-        lines.append("  No changes.")
+        lines.append("No price changes.")
         return "\n".join(lines)
 
     if rises:
-        rises.sort(key=lambda x: -x[3])
-        lines.append(f"  Rising ({len(rises)}):")
-        for name, old_c, new_c, delta in rises:
-            lines.append(f"    {name:<22s}  {old_c:.1f}m -> {new_c:.1f}m  (+{delta:.1f}m)")
+        rises.sort(key=lambda x: x[0])  # alphabetical
+        lines.append(f"\n**Price up +£0.1m 📈**")
+        for name, old_c, new_c in rises:
+            lines.append(f"• {name}  £{old_c:.1f} → £{new_c:.1f}")
 
     if falls:
-        falls.sort(key=lambda x: x[3])
-        lines.append(f"  Falling ({len(falls)}):")
-        for name, old_c, new_c, delta in falls:
-            lines.append(f"    {name:<22s}  {old_c:.1f}m -> {new_c:.1f}m  ({delta:.1f}m)")
+        falls.sort(key=lambda x: x[0])
+        lines.append(f"\n**Price down -£0.1m 📉**")
+        for name, old_c, new_c in falls:
+            lines.append(f"• {name}  £{old_c:.1f} → £{new_c:.1f}")
 
     if new_entries:
-        lines.append(f"  New entries ({len(new_entries)}):")
+        lines.append(f"\n**New entries 🆕**")
         for name, cost in new_entries:
-            lines.append(f"    {name:<22s}  {cost:.1f}m (new)")
+            lines.append(f"• {name}  £{cost:.1f}")
 
     if removed:
-        lines.append(f"  Removed ({len(removed)}):")
+        lines.append(f"\n**Removed ❌**")
         for name, cost in removed:
-            lines.append(f"    {name:<22s}  was {cost:.1f}m")
+            lines.append(f"• {name}  was £{cost:.1f}")
 
     return "\n".join(lines)
 

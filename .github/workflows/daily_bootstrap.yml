@@ -60,15 +60,13 @@ jobs:
               summary = "No price change summary generated."
 
           date_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-          header = f"**FPL Price Changes — {date_str}**"
+          content = f"**FPL Price Changes — {date_str}**\n{summary}"
 
-          # Discord code block; hard limit 2000 chars per message
-          body = f"```\n{summary}\n```"
-          if len(header) + len(body) + 1 > 2000:
-              max_summary = 2000 - len(header) - 10  # 10 = code fences + newline + margin
-              body = f"```\n{summary[:max_summary]}\n… (truncated)\n```"
+          # Discord hard limit: 2000 chars per message
+          if len(content) > 2000:
+              content = content[:1990] + "\n… (truncated)"
 
-          payload = {"content": f"{header}\n{body}"}
+          payload = {"content": content}
           r = requests.post(webhook, json=payload, timeout=10)
           r.raise_for_status()
           print(f"Discord notification sent (HTTP {r.status_code})")

@@ -568,6 +568,12 @@ def phase_recommend(
         squad_rec = predictions[predictions["element"].isin(squad_after_ids)][
             ["element", "name", "position", "team", "now_cost", "xP"]
         ].reset_index(drop=True)
+        # Free transfers remaining after recommended moves
+        free_used = sum(
+            1 for t in (plan.get("transfers") or [{}])[0].get("transfers", [])
+            if t.get("hit_cost", 0) == 0
+        )
+        squad_rec["free_transfers_after"] = max(1, user_state.free_transfers - free_used)
         squad_rec_path = RESULTS_DIR / f"squad_recommend_{gw_label}.csv"
         squad_rec.to_csv(squad_rec_path, index=False)
         xi_rec = select_xi(squad_rec)

@@ -45,6 +45,7 @@ def format_my_team_block(
     rec_rows: list[dict],
     bank: float,
     gw: int,
+    free_transfers: int | None = None,
 ) -> str:
     """Post-transfer 15-man squad: starters first by position, then bench."""
     if not squad_rows:
@@ -56,7 +57,8 @@ def format_my_team_block(
     starters = [r for r in squad_rows if str(r["element"]) in xi_elements]
     bench = [r for r in squad_rows if str(r["element"]) not in xi_elements]
 
-    lines = [f"**My Team After Transfers — GW{gw}** (bank: £{bank:.1f}m)"]
+    ft_str = f"transfers left: {free_transfers}, " if free_transfers is not None else ""
+    lines = [f"**My Team After Transfers — GW{gw}** ({ft_str}bank: £{bank:.1f}m)"]
 
     # Transfers summary (current GW only)
     gw_transfers = [r for r in rec_rows if int(r["gw"]) == gw and r.get("action") == "transfer"]
@@ -115,10 +117,11 @@ def main() -> None:
 
     gw_rec = [r for r in rec_rows if int(r["gw"]) == args.gw]
     bank = float(gw_rec[-1]["bank_after"]) if gw_rec else 0.0
+    free_transfers = int(squad_rec[0]["free_transfers_after"]) if squad_rec and "free_transfers_after" in squad_rec[0] else None
 
     print(format_wildcard_xi_block(xi_rows, args.gw))
     print()
-    print(format_my_team_block(squad_rec, xi_rec, rec_rows, bank, args.gw))
+    print(format_my_team_block(squad_rec, xi_rec, rec_rows, bank, args.gw, free_transfers))
 
 
 if __name__ == "__main__":

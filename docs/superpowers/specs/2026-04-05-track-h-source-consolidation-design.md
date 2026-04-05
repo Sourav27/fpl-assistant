@@ -35,12 +35,22 @@ Declared in `src/pipeline/datasources/__init__.py`. All source modules must emit
 ```python
 SOURCE_COLUMN_MAP = {
     # --- Per-match actuals (post-GW, shift(1) for rolling features) ---
+    # Source: element-summary/{id}/history — one row per PL match played
     "fpl_post_gw": {
         "role": "primary",
         "competitions": ["PL"],
         "timing": "after_gw",
         "endpoint": "element-summary/{id}/history",
         "columns": [
+            # Join / fixture context
+            "element",           # FPL player id (current-season, not persistent — use code for joins)
+            "fixture",           # FPL fixture id
+            "round",             # GW number
+            "kickoff_time",      # ISO datetime
+            "opponent_team",     # opposing team id
+            "was_home",
+            "team_h_score", "team_a_score",
+            "modified",          # last modified timestamp
             # Performance
             "minutes", "starts",
             "goals_scored", "assists", "own_goals",
@@ -51,46 +61,101 @@ SOURCE_COLUMN_MAP = {
             "expected_goals", "expected_assists",
             "expected_goal_involvements", "expected_goals_conceded",
             "influence", "creativity", "threat", "ict_index",
-            # Defensive (confirmed in element-summary history, not vaastav-only)
+            # Defensive
             "clearances_blocks_interceptions", "recoveries",
             "tackles", "defensive_contribution",
             # Bonus / points
             "bonus", "bps", "total_points",
-            # Transfer market
+            # Transfer market / ownership
             "transfers_in", "transfers_out", "transfers_balance", "selected",
-            # Fixture context
-            "was_home", "value",
+            # Price
+            "value",             # price at time of match (tenths of £M)
         ],
     },
 
     # --- Pre-GW snapshot (available at prediction time) ---
+    # Source: bootstrap-static/elements — one row per player, current state
+    # NOTE: also contains season-to-date cumulative totals (same stat names as
+    # fpl_post_gw). These are season aggregates, not per-match rows. Feature
+    # selection in Track C will decide which pre-GW cumulative stats to use.
     "fpl_pre_gw": {
         "role": "pre_gw_snapshot",
         "competitions": ["PL"],
         "timing": "before_gw",
         "endpoint": "bootstrap-static/elements",
         "columns": [
-            # Availability (feeds availability_features.py — see below)
-            "status", "news", "news_added",
+            # --- Identity / metadata ---
+            "id",                # FPL season-specific id
+            "code",              # persistent cross-season player code
+            "element_type",      # 1=GKP 2=DEF 3=MID 4=FWD
+            "team",              # team id
+            "team_code",         # persistent team code
+            "first_name", "second_name", "web_name", "known_name",
+            "opta_code",         # Opta player code
+            "squad_number",
+            "birth_date",
+            "region",            # nationality region code
+            "team_join_date",
+            "removed",           # True if delisted mid-season
+            "special",           # True for special (e.g. combined cards)
+            "has_temporary_code",
+            "photo",             # photo filename
+            # --- Availability (feeds availability_features.py) ---
+            "status",            # a/d/i/u/s/n
+            "news", "news_added",
             "chance_of_playing_this_round", "chance_of_playing_next_round",
-            # Set piece role (predictive of scoring/assist probability)
+            "can_transact",      # transfer eligibility flag
+            "can_select",        # squad selection eligibility flag
+            "scout_risks",       # FPL scout risk flags
+            "scout_news_link",   # link to scout article
+            # --- Set piece role ---
             "corners_and_indirect_freekicks_order",
-            "direct_freekicks_order", "penalties_order",
-            # Per-90 season aggregates
+            "corners_and_indirect_freekicks_text",
+            "direct_freekicks_order", "direct_freekicks_text",
+            "penalties_order", "penalties_text",
+            # --- Season-to-date cumulative stats (same fields as fpl_post_gw) ---
+            "minutes", "starts",
+            "goals_scored", "assists", "own_goals",
+            "clean_sheets", "goals_conceded",
+            "saves", "penalties_saved", "penalties_missed",
+            "yellow_cards", "red_cards",
+            "expected_goals", "expected_assists",
+            "expected_goal_involvements", "expected_goals_conceded",
+            "influence", "creativity", "threat", "ict_index",
+            "clearances_blocks_interceptions", "recoveries",
+            "tackles", "defensive_contribution",
+            "bonus", "bps",
+            # --- Per-90 season aggregates ---
             "expected_goals_per_90", "expected_assists_per_90",
             "expected_goal_involvements_per_90", "expected_goals_conceded_per_90",
             "clean_sheets_per_90", "saves_per_90",
             "goals_conceded_per_90", "starts_per_90",
             "defensive_contribution_per_90",
-            # FPL form signals
+            # --- FPL form / prediction signals ---
             "form", "points_per_game", "ep_next", "ep_this",
-            "ict_index_rank", "creativity_rank", "threat_rank", "influence_rank",
+            "event_points",      # points in the most recent GW
+            "total_points",      # season total
             "dreamteam_count", "in_dreamteam",
-            # Price
-            "now_cost", "cost_change_event", "cost_change_start",
+            # --- Rank signals ---
+            "ict_index_rank", "ict_index_rank_type",
+            "creativity_rank", "creativity_rank_type",
+            "threat_rank", "threat_rank_type",
+            "influence_rank", "influence_rank_type",
+            "now_cost_rank", "now_cost_rank_type",
+            "form_rank", "form_rank_type",
+            "points_per_game_rank", "points_per_game_rank_type",
+            "selected_rank", "selected_rank_type",
+            # --- Price / value ---
+            "now_cost",
+            "cost_change_event", "cost_change_event_fall",
+            "cost_change_start", "cost_change_start_fall",
+            "price_change_percent",
             "value_form", "value_season",
-            # Transfer momentum
+            # --- Transfer momentum ---
+            "transfers_in", "transfers_out",
             "transfers_in_event", "transfers_out_event",
+            # --- Ownership ---
+            "selected_by_percent",
         ],
     },
 

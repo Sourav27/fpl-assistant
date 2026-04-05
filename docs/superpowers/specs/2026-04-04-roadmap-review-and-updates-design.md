@@ -69,8 +69,8 @@ This document captures decisions from a structured critique + interview session.
 
 **Replace fixed cron with event-driven deadline detection.**
 
-- Daily bootstrap action fires at **02:00 UTC (7:30am IST)** — immediately after FPL prices update at 01:30 UTC (7am IST).
-  - **Pending verification:** Confirm FPL bootstrap API reflects price changes by 7:30am IST. Test GW32 day.
+- Daily bootstrap action fires at **01:40 UTC (7:10am IST)** — immediately after FPL prices update at 01:30 UTC (7am IST).
+  - **Pending verification:** Confirm FPL bootstrap API reflects price changes by 7:10am IST. Test GW32 day.
 - Action reads `events[*].is_next.deadline_time` from fetched bootstrap JSON.
 - If `deadline_time - now < 48h`: trigger predict + recommend phases automatically.
 - Model artifacts served via **GitHub Releases** — promote a new model by uploading `.sav` as a release asset tagged `gw{N}` (e.g., `gw34`). Action downloads via `gh release download` before running predict.
@@ -83,7 +83,7 @@ This document captures decisions from a structured critique + interview session.
 **Tasks:**
 | ID | Description | Files touched |
 |----|-------------|---------------|
-| E-F1 | Update bootstrap action: shift to 02:00 UTC, add deadline detection logic | `.github/workflows/daily_bootstrap.yml` |
+| E-F1 | Update bootstrap action: shift to 01:40 UTC, add deadline detection logic | `.github/workflows/daily_bootstrap.yml` |
 | E-F2 | Add predict + recommend trigger when deadline < 48h; download model from GitHub Releases | `.github/workflows/daily_bootstrap.yml`, `scripts/` |
 | E-F3 | Document GitHub Releases model promotion workflow | `CLAUDE.md` |
 
@@ -309,7 +309,7 @@ Research found standard NLP classifiers fail on FPL-specific language:
 
 | Item | How to verify | Gates |
 |------|--------------|-------|
-| FPL bootstrap API reflects price changes by 7:30am IST (02:00 UTC) | Check bootstrap response tomorrow morning at 02:00 UTC; compare `now_cost` values before/after 01:30 UTC | E-F1 bootstrap action timing |
+| FPL bootstrap API reflects price changes by 7:10am IST (01:40 UTC) | Check bootstrap response tomorrow morning at 01:40 UTC; compare `now_cost` values before/after 01:30 UTC | E-F1 bootstrap action timing |
 | `kickoff_time` in historical vaastav `fixtures.csv` for all 4 training seasons | `head data/Fantasy-Premier-League/data/2021-22/fixtures.csv` | B-F3 `rest_days` feature |
 | FPL team IDs stable across vaastav seasons for promoted/relegated clubs | Compare `teams/` directory across 4 seasons | B-F2 opponent join |
 | understat xG ρ vs FPL Opta xG ρ on actual goals | E-F5 validation task | Track B xGC feature source |

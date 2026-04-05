@@ -58,3 +58,60 @@ def test_log_unresolved_writes_csv(tmp_path):
     assert len(df) == 1
     assert df.iloc[0]["name"] == "Unknown X"
     assert df.iloc[0]["source"] == "ffs"
+
+
+# ── Task 4: FFS tests (append after existing tests) ──────────────────────────
+from src.pipeline.datasources.ffs import parse_ffs_feed, _classify_signal_type
+
+MOCK_RSS_FEED = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Fantasy Football Scout</title>
+    <item>
+      <title>Salah doubt for GW32 after training knock</title>
+      <description>Mohamed Salah is a doubt for the upcoming gameweek.</description>
+      <pubDate>Sat, 05 Apr 2026 08:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>Havertz available and fit to play</title>
+      <description>Kai Havertz has returned to training and is available.</description>
+      <pubDate>Sat, 05 Apr 2026 09:00:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>"""
+
+
+def test_classify_doubt():
+    assert _classify_signal_type("Salah doubt for GW32 after knock") == "doubt"
+
+
+def test_classify_available():
+    assert _classify_signal_type("Player available and fit to play") == "available"
+
+
+def test_classify_injured():
+    assert _classify_signal_type("Player ruled out for three weeks") == "injured"
+
+
+def test_classify_general_news():
+    assert _classify_signal_type("Manager press conference notes") == "general_news"
+
+
+def test_parse_ffs_feed_returns_signals():
+    signals = parse_ffs_feed(
+        rss_content=MOCK_RSS_FEED,
+        bootstrap_data=MOCK_BOOTSTRAP,
+    )
+    assert isinstance(signals, list)
+    assert len(signals) > 0
+    for sig in signals:
+        from src.pipeline.datasources.signals import PlayerSignal
+        assert isinstance(sig, PlayerSignal)
+        assert sig.source == "ffs"
+
+
+def test_parse_ffs_doubt_signal():
+    signals = parse_ffs_feed(rss_content=MOCK_RSS_FEED, bootstrap_data=MOCK_BOOTSTRAP)
+    doubt_signals = [s for s in signals if s.signal_type == "doubt"]
+    assert len(doubt_signals) >= 1
+    assert doubt_signals[0].player_code == 80201  # Salah

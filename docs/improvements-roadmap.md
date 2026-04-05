@@ -2,7 +2,7 @@
 
 > **How to use this file:** Each _Track_ is one initiative — a self-contained batch of work you can ship in a day or a week. Tracks link to detailed plan files. Start a track by opening its plan and following task-by-task instructions. Tracks are ordered by impact/effort ratio.
 
-Last updated: 2026-04-04.
+Last updated: 2026-04-05.
 
 ---
 
@@ -238,41 +238,32 @@ File: `src/pipeline/run.py:phase_retrain()`. Risk: low — drop-in replacement.
 
 ---
 
-### 💡 Track E — Data Collection Pipeline (NOW FIRST PRIORITY)
-**Status:** BACKLOG · **Effort:** ~1 week
-**Plan:** Not yet written — write plan before starting. See `docs/superpowers/specs/2026-04-04-roadmap-review-and-updates-design.md` Section 4 for full task specs.
+### ✅ Track E — Scheduling: Deadline Detection & Model Promotion
+**Status:** COMPLETE (2026-04-05) · **Tests:** 159 passing
+**Plan:** [`docs/superpowers/plans/2026-04-04-track-e-scheduling.md`](superpowers/plans/2026-04-04-track-e-scheduling.md)
 
-**Objective:** Validate and integrate new data sources (xG, European minutes, injury signals) before Track B feature engineering starts. Also absorbs Track G Phase 1 (signal collection + feedback logging) — display is Track F's responsibility.
+**What was built:**
+- `tests/test_fetch_bootstrap_snapshots.py` — E-F1 coverage: `_price_change_summary` + `price_changes_latest.txt` (22 tests total)
+- `scripts/check_deadline.py` — reads bootstrap JSON, returns hours until next GW deadline, writes GitHub Actions output vars
+- `tests/test_check_deadline.py` — 6 unit tests for deadline detection
+- `.github/workflows/daily_bootstrap.yml` — 8 new steps: deadline check, deadline Discord alert, model download from GitHub Releases, user_config write, predict+recommend trigger, results commit, Discord results notification
+- `CLAUDE.md` — "Model Promotion via GitHub Releases" subsection with `gh release create` workflow and secrets docs
+- `src/pipeline/run.py` — post-transfer squad save: `squad_recommend_gw{N}.csv` (15 players) and `xi_recommend_gw{N}.csv` (11 starters)
+- `scripts/format_discord_results.py` — `format_wildcard_xi_block()` and `format_my_team_block()`: pure formatting functions for Discord messages
+- `tests/test_format_discord_results.py` — 10 tests (captain identity by element ID, bench header, bank/transfers display, future-GW exclusion)
+- `tests/test_run_recommend_saves_squad.py` — 2 tests for squad/XI CSV persistence
 
-#### Scheduling (E-F1 through E-F3)
+#### Scheduling tasks completed
 
-| ID | What | Effort |
+| ID | What | Status |
 |----|------|--------|
-| ✅ E-F1 | Shift bootstrap action to 02:00 UTC; Discord price-change notification — **done** (commit 434ef7d). Test: pending. | 0.5 day |
-| E-F2 | Auto-trigger predict + recommend when deadline < 48h; download model from GitHub Releases | 1 day |
-| E-F3 | Document GitHub Releases model promotion workflow in `CLAUDE.md` | 0.5 day |
+| E-F1 | Bootstrap action tests: `_price_change_summary` + `price_changes_latest.txt` | ✅ done |
+| E-F2a | `scripts/check_deadline.py` helper — parse bootstrap → hours until deadline | ✅ done |
+| E-F2b | GitHub Actions: deadline proximity trigger for predict+recommend + model download | ✅ done |
+| E-F3 | Document GitHub Releases model promotion workflow in `CLAUDE.md` | ✅ done |
+| E-F4a | Save `squad_recommend_gw{N}.csv` + `xi_recommend_gw{N}.csv` from `phase_recommend()` | ✅ done |
+| E-F4b | Discord notification: Wildcard XI + My Team After Transfers (15 players, bench, bank, FTs) | ✅ done |
 
-#### Data Sources (E-F4 through E-F9)
-
-| ID | What | Feeds | Effort |
-|----|------|-------|--------|
-| E-F4 | `understatAPI` — PL xG, xA, xGC per player per GW (EPL only) | Track B `xGC_rolling_4` | 1 day |
-| E-F5 | xG source validation gate — Spearman ρ(understat xG, actual goals) vs ρ(FPL Opta xG, actual goals); log to `results/source_validation.csv` | B-F1b decision | 0.5 day |
-| E-F6 | `soccerdata` + FotMob — European/international minutes; cross-validate against FPL `element-summary` | Track B DGW rotation, Track G Tier 3 | 1 day |
-| E-F7 | FFS RSS parser (`https://www.fantasyfootballscout.co.uk/feed`) → `PlayerSignal` structs; player name resolution with `signal_unresolved.csv` fallback | Track F `GET /api/news` | 0.5 day |
-| E-F8 | Reddit r/FantasyPL JSON API client → `PlayerSignal` structs (24–48h pre-deadline differential buzz) | Track F `GET /api/news` | 0.5 day |
-| E-F9 | premierinjuries.com scraper → `PlayerSignal` structs (`doubt / available / injured`); cross-verify every signal against FPL API `status` | Track F `GET /api/news` | 0.5 day |
-
-#### Signal Feedback Logging (E-F10 — absorbed from Track G Phase 1)
-
-| ID | What | Effort |
-|----|------|--------|
-| E-F10 | When team sheets arrive, log each E-F7/E-F8/E-F9 signal against actual lineup outcome: `results/signal_accuracy.csv` — `{signal_id, source, signal_type, predicted_status, actual_started, gw}` | 0.5 day |
-
-#### Deferred
-
-- **P3b (FBref):** Dropped — FBref aggressively rate-limits and changes table structure. understatAPI covers the same territory more reliably.
-- **P3c (Ensemble predictions):** Deferred until Track B ships. After Track B: 4 RF + 4 XGBoost = 8 models; ensemble averages within each position bucket. Effort: 0.5 day.
 
 ---
 

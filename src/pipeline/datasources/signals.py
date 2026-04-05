@@ -62,19 +62,17 @@ def log_unresolved_name(
 ) -> None:
     """Write an unresolved player name to signal_unresolved.csv for manual review."""
     import pandas as pd
-    if csv_path is None:
-        from src.config import SIGNAL_UNRESOLVED_CSV
-        csv_path = SIGNAL_UNRESOLVED_CSV
-    csv_path = Path(csv_path)
+    from src.config import SIGNAL_UNRESOLVED_CSV
+    resolved_path: Path = Path(csv_path) if csv_path is not None else Path(SIGNAL_UNRESOLVED_CSV)
     row = pd.DataFrame([{
         "name": name,
         "source": source,
         "raw_text": raw_text,
         "timestamp": timestamp,
     }])
-    if csv_path.exists():
-        row.to_csv(csv_path, mode="a", header=False, index=False)
+    if resolved_path.exists():
+        row.to_csv(resolved_path, mode="a", header=False, index=False)
     else:
-        csv_path.parent.mkdir(parents=True, exist_ok=True)
-        row.to_csv(csv_path, index=False)
-    logger.debug("Unresolved name '%s' from '%s' logged to %s", name, source, csv_path)
+        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        row.to_csv(resolved_path, index=False)
+    logger.debug("Unresolved name '%s' from '%s' logged to %s", name, source, resolved_path)

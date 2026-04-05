@@ -30,8 +30,8 @@ def compute_source_spearman(df: pd.DataFrame, xg_col: str, actual_col: str) -> f
     clean = df[[xg_col, actual_col]].dropna()
     if len(clean) < 10:
         logger.warning("Only %d samples for Spearman ρ — result unreliable", len(clean))
-    rho, _ = spearmanr(clean[xg_col], clean[actual_col])
-    return float(rho)
+    sr = spearmanr(clean[xg_col], clean[actual_col])
+    return float(sr[0])  # sr[0] is the correlation coefficient (scipy stubs lack .statistic)
 
 
 def run_xg_validation_gate(

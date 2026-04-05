@@ -59,3 +59,8 @@ Thumbs.db
 
 # User-specific config (contains private FPL entry IDs)
 user_config.yaml
+
+# Track H datasource result CSVs (auto-generated, not for version control)
+results/source_validation.csv
+results/signal_accuracy.csv
+results/signal_unresolved.csv

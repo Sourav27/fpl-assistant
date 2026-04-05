@@ -56,6 +56,7 @@ def test_source_column_map_fpl_post_gw_has_required_columns():
     for col in ["minutes", "goals_scored", "assists", "expected_goals"]:
         assert col in cols
     assert "xg_chain" not in cols, "xg_chain must not be in fpl_post_gw — Understat owns it"
+    assert "xg_buildup" not in cols, "xg_buildup must not be in fpl_post_gw — Understat owns it"
 
 
 def test_source_column_map_understat_only_unique_cols():

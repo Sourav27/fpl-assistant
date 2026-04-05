@@ -268,28 +268,30 @@ File: `src/pipeline/run.py:phase_retrain()`. Risk: low — drop-in replacement.
 
 ---
 
-### 💡 Track H — Data Sources Integration
-**Status:** BACKLOG · **Effort:** ~4–5 days
-**Plan:** Not yet written — write plan before starting. Unblocks Track B fixture features and Track F/G signal feeds.
+### ✅ Track H — Data Sources Integration
+**Status:** COMPLETE (2026-04-05) · **Tests:** 208 passing
+**Plan:** [`docs/superpowers/plans/2026-04-05-track-h-data-sources.md`](superpowers/plans/2026-04-05-track-h-data-sources.md)
 
-**Objective:** Validate and integrate new data sources (xG, European minutes, injury signals) before Track B feature engineering starts. Also absorbs Track G Phase 1 (signal collection + feedback logging) — display is Track F's responsibility.
+**What was built:**
+- `src/pipeline/datasources/` — new package with one module per external source
+- `src/pipeline/datasources/signals.py` — `PlayerSignal` dataclass, `resolve_player_name`, `log_unresolved_name`; unresolved player names logged to `results/signal_unresolved.csv`
+- `src/pipeline/datasources/understat.py` — async understatAPI client: `fetch_understat_player_gw_stats` + `compute_team_xgc_per_gw` (EPL only)
+- `src/pipeline/datasources/soccerdata_client.py` — FotMob wrapper: `fetch_fotmob_player_minutes` + `cross_validate_with_fpl` (European/international only); reliability gate: MAE ≤ 5 min AND correlation ≥ 0.95
+- `src/pipeline/datasources/ffs.py` — Fantasy Football Scout RSS parser → `PlayerSignal` list; rule-based keyword classification (injured > doubt > available > general_news)
+- `src/pipeline/datasources/reddit.py` — Reddit r/FantasyPL JSON API client → `PlayerSignal` list; display-only Phase 1; confidence = 0.5
+- `src/pipeline/datasources/premierinjuries.py` — HTML scraper → `PlayerSignal` list; `cross_verify_against_fpl` flags contradictions (signal must NOT adjust xP if contradicted)
+- `src/pipeline/source_validation.py` — Spearman ρ gate: `run_xg_validation_gate(understat_rho, fpl_opta_rho, tolerance=0.05)`; logs to `results/source_validation.csv`
+- `src/pipeline/signal_feedback.py` — per-source accuracy logger: `append_signal_feedback` + `compute_source_accuracy`; feeds Track G Phase 2 activation gate (≥ 80% accuracy over ≥ 15 obs per source-type pair)
+- `src/config.py` — added `SOURCE_VALIDATION_CSV`, `SIGNAL_ACCURACY_CSV`, `SIGNAL_UNRESOLVED_CSV`
+- `tests/datasources/` — 43 new tests across unit + integration suites (all mocked, no live HTTP in CI)
 
-#### Data Sources
+**Commits:** `2295d0c` → `4e4662e` (13 commits on `feature/track-h-data-sources`)
 
-| ID | What | Feeds | Effort |
-|----|------|-------|--------|
-| H-F1 | `understatAPI` — PL xG, xA, xGC per player per GW (EPL only) | Track B `xGC_rolling_4` | 1 day |
-| H-F2 | xG source validation gate — Spearman ρ(understat xG, actual goals) vs ρ(FPL Opta xG, actual goals); log to `results/source_validation.csv` | B-F1b decision | 0.5 day |
-| H-F3 | `soccerdata` + FotMob — European/international minutes; cross-validate against FPL `element-summary` | Track B DGW rotation, Track G Tier 3 | 1 day |
-| H-F4 | FFS RSS parser (`https://www.fantasyfootballscout.co.uk/feed`) → `PlayerSignal` structs; player name resolution with `signal_unresolved.csv` fallback | Track F `GET /api/news` | 0.5 day |
-| H-F5 | Reddit r/FantasyPL JSON API client → `PlayerSignal` structs (24–48h pre-deadline differential buzz) | Track F `GET /api/news` | 0.5 day |
-| H-F6 | premierinjuries.com scraper → `PlayerSignal` structs (`doubt / available / injured`); cross-verify every signal against FPL API `status` | Track F `GET /api/news` | 0.5 day |
-
-#### Signal Feedback Logging (H-F7 — absorbed from Track G Phase 1)
-
-| ID | What | Effort |
-|----|------|--------|
-| H-F7 | When team sheets arrive, log each H-F4/H-F5/H-F6 signal against actual lineup outcome: `results/signal_accuracy.csv` — `{signal_id, source, signal_type, predicted_status, actual_started, gw}` | 0.5 day |
+**What each source unblocks:**
+- **H-F1/H-F2** → Track B `xGC_rolling_4` feature (use understat if gate passes, else vaastav `goals_conceded`)
+- **H-F3** → Track B DGW rotation (`rest_days` feature), Track G Tier 3 minutes tracker
+- **H-F4/H-F5/H-F6** → Track F `GET /api/news` endpoint (PlayerSignal list ready to serve)
+- **H-F7** → Track G Phase 2 xP auto-adjustment (accuracy log accumulating from day 1)
 
 #### Deferred
 

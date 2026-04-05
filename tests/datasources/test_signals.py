@@ -168,3 +168,98 @@ def test_reddit_signals_have_low_confidence():
     for sig in signals:
         assert sig.confidence <= 0.6
         assert sig.source == "reddit"
+
+
+# ── Task 6: premierinjuries tests (append after Reddit tests) ─────────────────
+from src.pipeline.datasources.premierinjuries import (
+    parse_premierinjuries_html,
+    cross_verify_against_fpl,
+)
+
+MOCK_PI_HTML = """<html><body>
+<table id="player-injury-table">
+  <thead><tr><th>Player</th><th>Club</th><th>Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Mohamed Salah</td><td>Liverpool</td><td>Doubt</td><td>Knock in training</td></tr>
+    <tr><td>Unknown Player X</td><td>City</td><td>Available</td><td>Fit to play</td></tr>
+  </tbody>
+</table>
+</body></html>"""
+
+MOCK_FPL_STATUS = {80201: "a"}
+
+
+def test_parse_pi_html_returns_signals():
+    signals = parse_premierinjuries_html(
+        html_content=MOCK_PI_HTML,
+        bootstrap_data=MOCK_BOOTSTRAP,
+    )
+    assert isinstance(signals, list)
+    assert all(s.source == "premierinjuries" for s in signals)
+
+
+def test_parse_pi_resolved_signal():
+    signals = parse_premierinjuries_html(
+        html_content=MOCK_PI_HTML,
+        bootstrap_data=MOCK_BOOTSTRAP,
+    )
+    resolved = [s for s in signals if s.player_code == 80201]
+    assert len(resolved) == 1
+    assert resolved[0].signal_type == "doubt"
+
+
+def test_parse_pi_unresolved_skipped():
+    signals = parse_premierinjuries_html(
+        html_content=MOCK_PI_HTML,
+        bootstrap_data=MOCK_BOOTSTRAP,
+    )
+    player_codes = [s.player_code for s in signals]
+    assert 80201 in player_codes
+    assert len(signals) == 1
+
+
+def test_parse_pi_unresolved_writes_csv(tmp_path):
+    from src.pipeline.datasources.signals import log_unresolved_name
+    csv_path = tmp_path / "signal_unresolved.csv"
+    log_unresolved_name(
+        name="Unknown Player X", source="premierinjuries",
+        raw_text="Unknown Player X: available.", csv_path=csv_path,
+    )
+    import pandas as pd
+    assert csv_path.exists()
+    df = pd.read_csv(csv_path)
+    assert df.iloc[0]["name"] == "Unknown Player X"
+    assert df.iloc[0]["source"] == "premierinjuries"
+
+
+def test_parse_reddit_unresolved_writes_csv(tmp_path):
+    from src.pipeline.datasources.signals import log_unresolved_name
+    csv_path = tmp_path / "signal_unresolved.csv"
+    log_unresolved_name(
+        name="Zxqwertyplayer123", source="reddit",
+        raw_text="Zxqwertyplayer123 doubt for GW32", csv_path=csv_path,
+    )
+    import pandas as pd
+    assert csv_path.exists()
+    df = pd.read_csv(csv_path)
+    assert df.iloc[0]["source"] == "reddit"
+
+
+def test_cross_verify_contradiction_detected():
+    signal = PlayerSignal(
+        player_code=80201, source="premierinjuries",
+        signal_type="injured", text="Salah out", timestamp="2026-04-05T08:00:00Z",
+    )
+    fpl_status = {80201: "a"}
+    result = cross_verify_against_fpl([signal], fpl_status)
+    assert result[0]["contradicted"] is True
+
+
+def test_cross_verify_consistent():
+    signal = PlayerSignal(
+        player_code=80201, source="premierinjuries",
+        signal_type="doubt", text="Salah doubt", timestamp="2026-04-05T08:00:00Z",
+    )
+    fpl_status = {80201: "d"}
+    result = cross_verify_against_fpl([signal], fpl_status)
+    assert result[0]["contradicted"] is False

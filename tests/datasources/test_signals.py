@@ -115,3 +115,56 @@ def test_parse_ffs_doubt_signal():
     doubt_signals = [s for s in signals if s.signal_type == "doubt"]
     assert len(doubt_signals) >= 1
     assert doubt_signals[0].player_code == 80201  # Salah
+
+
+# ── Task 5: Reddit tests (append after FFS tests) ────────────────────────────
+from src.pipeline.datasources.reddit import parse_reddit_posts
+
+MOCK_REDDIT_RESPONSE = {
+    "data": {
+        "children": [
+            {"data": {
+                "title": "Salah doubtful — training ground reports suggest knock",
+                "selftext": "Multiple sources saying Salah picked up a knock in training.",
+                "created_utc": 1743840000,
+                "score": 245,
+            }},
+            {"data": {
+                "title": "My GW32 template — what do you think?",
+                "selftext": "Here is my squad...",
+                "created_utc": 1743840000,
+                "score": 12,
+            }},
+        ]
+    }
+}
+
+
+def test_parse_reddit_returns_signals():
+    signals = parse_reddit_posts(
+        posts_data=MOCK_REDDIT_RESPONSE,
+        bootstrap_data=MOCK_BOOTSTRAP,
+        min_score=50,
+    )
+    assert isinstance(signals, list)
+    assert all(hasattr(s, "player_code") for s in signals)
+
+
+def test_parse_reddit_filters_low_score():
+    signals = parse_reddit_posts(
+        posts_data=MOCK_REDDIT_RESPONSE,
+        bootstrap_data=MOCK_BOOTSTRAP,
+        min_score=300,
+    )
+    assert signals == []
+
+
+def test_reddit_signals_have_low_confidence():
+    signals = parse_reddit_posts(
+        posts_data=MOCK_REDDIT_RESPONSE,
+        bootstrap_data=MOCK_BOOTSTRAP,
+        min_score=50,
+    )
+    for sig in signals:
+        assert sig.confidence <= 0.6
+        assert sig.source == "reddit"

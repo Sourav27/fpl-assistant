@@ -109,8 +109,12 @@ SOURCE_COLUMN_MAP = {
         "role": "primary",
         "competitions": ["UCL", "UEL", "UECL", "FA_Cup", "Carabao", "FIFA_Friendly", "INT"],
         "espn_league_slugs": [
-            "uefa.champions", "uefa.europa", "uefa.europa.conf",
-            "eng.fa", "eng.league_cup", "fifa.friendly",
+            "uefa.champions",    # confirmed via Palmer/Enzo live test
+            "uefa.europa",       # unverified slug — probe before use
+            "uefa.europa.conf",  # unverified slug — probe before use
+            "eng.fa",            # confirmed via Palmer FA Cup live test
+            "eng.league_cup",    # confirmed via Palmer Carabao Cup live test
+            "fifa.friendly",     # confirmed via Palmer England internationals live test
         ],
         "timing": "after_match",
         "seasons": "2021-present",
@@ -129,7 +133,7 @@ SOURCE_COLUMN_MAP = {
     "fpl_news": {
         "role": "availability_primary",
         "timing": "before_gw",
-        "columns": ["is_injured", "is_doubt", "availability_raw_text"],
+        "columns": ["is_injured", "is_doubt", "is_suspended", "availability_raw_text"],
     },
     "premierinjuries": {
         "role": "availability_fallback",
@@ -165,7 +169,7 @@ async with UnderstatClient() as client:
 
 # After (correct)
 import soccerdata as sd
-u = sd.Understat(leagues="ENG-Premier League", seasons=season_code)
+u = sd.Understat(leagues="ENG-Premier League", seasons="2324")  # format: "YYYY" e.g. "2324" for 2023-24, "2425" for 2024-25
 df = u.read_player_match_stats()
 return df[["xg_chain", "xg_buildup"]]
 ```
@@ -199,8 +203,11 @@ Before building the full 2021–present backfill, verify that the eventlog API r
 **Produces four feature columns per player:**
 
 ```python
-# is_injured: FPL status in {i, u, s, n} → hard injured
-is_injured = int(fpl_status in {"i", "u", "s", "n"})
+# is_injured: FPL status in {i, u} → physically injured/unavailable due to injury
+# status 's' (suspended) → is_suspended (separate column, not is_injured)
+# status 'n' (not in squad / loaned out) → excluded from squad entirely, not flagged as injured
+is_injured   = int(fpl_status in {"i", "u"})
+is_suspended = int(fpl_status == "s")
 
 # is_doubt: FPL status == 'd' (primary signal, NOT chance threshold)
 # Edge case: status='d' with chance=100 means doubtful-tagged but expected to start
@@ -222,9 +229,9 @@ n_corroborating_sources = sum(1 for s in all_sources if s.agrees_with_primary)
 
 **Note:** `is_doubt` is driven by `status == 'd'`, not by `chance_of_playing < 75`. The chance threshold is a separate, weaker signal that can be used as an additional feature column but must not define `is_doubt`.
 
-### 4. `source_validation.py` — docstring update only
+### 4. `src/pipeline/source_validation.py` — docstring update only
 
-Clarify that the Spearman ρ gate now validates `xg_chain`/`xg_buildup` correlation against actual goal-chain outcomes (not xG vs actual goals, since xG is now FPL-only).
+File lives at the **pipeline root** (`src/pipeline/source_validation.py`), not inside `datasources/`. This is intentional — it is a pipeline-level gate, not a per-source module. Clarify in docstring that the Spearman ρ gate now validates `xg_chain`/`xg_buildup` correlation against actual goal-chain outcomes (not xG vs actual goals, since xG is now FPL-only).
 
 ### 5. `__init__.py` — add `SOURCE_COLUMN_MAP`
 

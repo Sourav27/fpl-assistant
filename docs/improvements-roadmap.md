@@ -265,6 +265,37 @@ File: `src/pipeline/run.py:phase_retrain()`. Risk: low — drop-in replacement.
 | E-F4b | Discord notification: Wildcard XI + My Team After Transfers (15 players, bench, bank, FTs) | ✅ done |
 
 
+
+---
+
+### 💡 Track H — Data Sources Integration
+**Status:** BACKLOG · **Effort:** ~4–5 days
+**Plan:** Not yet written — write plan before starting. Unblocks Track B fixture features and Track F/G signal feeds.
+
+**Objective:** Validate and integrate new data sources (xG, European minutes, injury signals) before Track B feature engineering starts. Also absorbs Track G Phase 1 (signal collection + feedback logging) — display is Track F's responsibility.
+
+#### Data Sources
+
+| ID | What | Feeds | Effort |
+|----|------|-------|--------|
+| H-F1 | `understatAPI` — PL xG, xA, xGC per player per GW (EPL only) | Track B `xGC_rolling_4` | 1 day |
+| H-F2 | xG source validation gate — Spearman ρ(understat xG, actual goals) vs ρ(FPL Opta xG, actual goals); log to `results/source_validation.csv` | B-F1b decision | 0.5 day |
+| H-F3 | `soccerdata` + FotMob — European/international minutes; cross-validate against FPL `element-summary` | Track B DGW rotation, Track G Tier 3 | 1 day |
+| H-F4 | FFS RSS parser (`https://www.fantasyfootballscout.co.uk/feed`) → `PlayerSignal` structs; player name resolution with `signal_unresolved.csv` fallback | Track F `GET /api/news` | 0.5 day |
+| H-F5 | Reddit r/FantasyPL JSON API client → `PlayerSignal` structs (24–48h pre-deadline differential buzz) | Track F `GET /api/news` | 0.5 day |
+| H-F6 | premierinjuries.com scraper → `PlayerSignal` structs (`doubt / available / injured`); cross-verify every signal against FPL API `status` | Track F `GET /api/news` | 0.5 day |
+
+#### Signal Feedback Logging (H-F7 — absorbed from Track G Phase 1)
+
+| ID | What | Effort |
+|----|------|--------|
+| H-F7 | When team sheets arrive, log each H-F4/H-F5/H-F6 signal against actual lineup outcome: `results/signal_accuracy.csv` — `{signal_id, source, signal_type, predicted_status, actual_started, gw}` | 0.5 day |
+
+#### Deferred
+
+- **P3b (FBref):** Dropped — FBref aggressively rate-limits and changes table structure. understatAPI covers the same territory more reliably.
+- **P3c (Ensemble predictions):** Deferred until Track B ships. After Track B: 4 RF + 4 XGBoost = 8 models; ensemble averages within each position bucket. Effort: 0.5 day.
+
 ---
 
 ### 💡 Track F — Web App (Dashboard + API)
@@ -350,107 +381,8 @@ POST /api/pipeline/run   → trigger pipeline phase (predict/recommend)
 | **Thu–Fri** | `python -m src.pipeline.run recommend --gw N --horizon 3` — make transfers |
 | **Sat night** | `python -m src.pipeline.run post-gw` — collect results, update accuracy log |
 | **Monthly** | `python -m src.pipeline.run retrain --gw N` — re-train model on new data |
-| **Off-season** | Work one Track per week: B → C → D → E → F → G |
+| **Off-season** | Work one Track per week: E → H → B → C → D → F |
 
 ---
 
-## Reference: Baseline Performance
-
-The R-based `FPL_xPMin` script ran over 33/38 GWs in 2022-23 and is the closest historical benchmark:
-
-| Metric | Value |
-|--------|-------|
-| GWs covered | 33 / 38 (GW 5–38, skipping blank GW 7) |
-| Avg predicted xP | 98.9 pts/GW |
-| Avg actual pts | 95.0 pts/GW |
-| Prediction accuracy | 96% |
-| Best GW | GW 29 — 148.1 xP predicted, 146 actual (Watkins captain) |
-| Most-captained | Haaland (15/33 GWs) |
-
-**Insight:** The optimizer already captures ~96% of achievable value. Further gains must come from better *point prediction*, not solver tuning.
-
----
-
-## Reference: ML Model Baselines (2022-23 data)
-
-| Model | MAE | RMSE | R² | Notes |
-|-------|-----|------|----|-------|
-| Mean baseline | 1.556 | 2.372 | — | Predict every player scores the mean |
-| Linear regression | 1.075 | 1.967 | — | Simple but competitive |
-| Random Forest (global) | 1.035 | 1.948 | 0.313 | **Current production model** |
-| XGBoost (global) | 1.026 | 1.952 | — | ~1% edge over RF; Track C/P1a |
-| RF positional — GK | 0.770 | — | 0.438 | Most predictable position |
-| RF positional — DEF | 0.910 | — | — | |
-| RF positional — MID | 1.048 | — | — | |
-| RF positional — FWD | 1.249 | — | 0.321 | Least predictable |
-
-**Key insight:** Global model R² ~0.31 means we explain ~31% of per-GW variance. Positional models do not consistently beat the global model; position is already encoded as a feature.
-
----
-
-## Reference: Top Predictive Features (NB04 feature importance)
-
-Ranked by RF mean decrease in impurity:
-
-1. `minutes` / `minutes_roll_4` — 16–30% importance. **Playing time is king.** Two-stage model (Track C/P1b) targets this.
-2. `ict_index_roll_4` — influence + creativity + threat composite. In pipeline.
-3. `total_points_roll_4` — form momentum. In pipeline.
-4. `bps_roll_4` — bonus point system predicts bonus allocation. In pipeline.
-5. `xG` / `xA` — **commented out in NB04** because Understat scraper was broken. Track B/P4 revives these.
-
----
-
-## Reference: Optimizer Constraints
-
-Hard constraints enforced in `src/pipeline/optimize.py`. Do not regress these when modifying the optimizer.
-
-```
-Squad (15 players):
-  - Budget ≤ £100.0M (now_cost in tenths: ≤ 1000)
-  - Exactly 2 GK, 5 DEF, 5 MID, 3 FWD
-  - Max 3 players from any single club
-
-XI (11 starters):
-  - Exactly 1 GK
-  - At least 3 DEF, 2 MID, 1 FWD
-  - Total starters = 11
-
-Captain / Vice-Captain:
-  - 1 captain (xP × 2), 1 vice-captain (fallback)
-```
-
----
-
-## Reference: API Endpoints
-
-```python
-BASE_URL = "https://fantasy.premierleague.com/api/"
-
-# Core (src/pipeline/fetch.py)
-bootstrap  = BASE_URL + "bootstrap-static/"          # player + team metadata
-element    = BASE_URL + "element-summary/{id}/"      # per-player GW history
-fixtures   = BASE_URL + "fixtures/"                  # fixtures with FDR
-live       = BASE_URL + "event/{gw}/live/"           # live GW points
-
-# Track A additions (src/pipeline/user.py via src/config.py FPL_*_URL constants)
-entry      = BASE_URL + "entry/{id}/"                # bank, league membership
-picks      = BASE_URL + "entry/{id}/event/{gw}/picks/"  # squad picks + selling prices
-history    = BASE_URL + "entry/{id}/history/"        # GW-by-GW history + transfer log
-standings  = BASE_URL + "leagues-classic/{id}/standings/?page_standings={p}&event={gw}"
-```
-
-No authentication required. 3–5 s sleep between player fetches is safe (700 players ≈ 35 min full collection).
-
----
-
-## Archive: Notebook Observations
-
-| Notebook | What it does | Runnable? | Key blocker |
-|----------|-------------|-----------|-------------|
-| 01_eda.ipynb | FPL API data collector. 35+ min runtime. | No | Hardcoded Windows path; superseded |
-| 02_feature_engineering.ipynb | Rolling/momentum features. Vectorised cell `80c05094` is 100× faster than iterrows. | Partial | Needs `cleaned_merged_seasons1.csv` |
-| 03_player_clustering.ipynb | KMeans (K=3) cold-start prior. MAE 1.556 → 1.327. | Partial | Needs `team_key.csv` from NB07 |
-| 04_model_training.ipynb | Global RF + XGBoost. XGBoost wins (MAE 1.026). Top feature: minutes (16–30%). | Yes (path fix) | Hardcoded season path |
-| 05_model_training_positional.ipynb | Positional models. GK best (0.770), FWD worst (1.249). | Yes (path fix) | Hardcoded season path |
-| 06_team_optimization.ipynb | MINLP/GEKKO exploration. Incomplete. | No | `gekko` unmaintained |
-| 07_team_key_mapping.ipynb | Builds `team_key.csv` for NB03. | Yes (path fix) | Hardcoded path |
+> **Reference data** (baselines, model benchmarks, feature importance, optimizer constraints, API endpoints) has been moved to [`docs/reference.md`](reference.md).

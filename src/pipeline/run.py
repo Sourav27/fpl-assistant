@@ -517,7 +517,11 @@ def phase_recommend(
         bootstrap = _load_cached_bootstrap(target_gw)
         if bootstrap is None:
             bootstrap = fetch_bootstrap()
-        user_state = fetch_user_team_state(entry_id, target_gw or get_current_gw(bootstrap), bootstrap)
+        # Picks only exist for completed GWs. target_gw is the upcoming GW we're
+        # planning for, so fetch the squad from the most recently completed GW.
+        current_gw = get_current_gw(bootstrap)
+        squad_gw = current_gw or target_gw
+        user_state = fetch_user_team_state(entry_id, squad_gw, bootstrap)
     except Exception as e:
         print(f"[recommend] ERROR fetching team state: {e}")
         return None

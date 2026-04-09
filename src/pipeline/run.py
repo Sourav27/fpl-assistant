@@ -127,18 +127,21 @@ def phase_predict(target_gw: int | None = None):
     merged = build_merged_dataset(vaastav_dir=VAASTAV_DIR)
     print(f"[predict] Dataset: {len(merged)} rows, {len(merged.columns)} columns")
 
-    print("[predict] Engineering features...")
-    features = engineer_features(merged)
-    print(f"[predict] Features: {len(features)} rows after NaN drop")
-
-    # Get latest row per player for prediction.
-    # Group by persistent code when available to avoid element-ID recycling across seasons.
-    player_id = "code" if "code" in features.columns else "element"
-    latest = features.sort_values([player_id, "GW"]).groupby(player_id).last().reset_index()
-
-    # Ensure now_cost column exists (vaastav uses 'value', FPL API uses 'now_cost')
-    if "now_cost" not in latest.columns:
-        latest["now_cost"] = latest.get("value", pd.Series(50, index=latest.index))
+    if not merged.empty:
+        print("[predict] Engineering features...")
+        features = engineer_features(merged)
+        print(f"[predict] Features: {len(features)} rows after NaN drop")
+        # Group by persistent code when available to avoid element-ID recycling across seasons.
+        player_id = "code" if "code" in features.columns else "element"
+        latest = features.sort_values([player_id, "GW"]).groupby(player_id).last().reset_index()
+        # Ensure now_cost column exists (vaastav uses 'value', FPL API uses 'now_cost')
+        if "now_cost" not in latest.columns:
+            latest["now_cost"] = latest.get("value", pd.Series(50, index=latest.index))
+    else:
+        # No vaastav data — bootstrap ep_next is used as the xP source (seeded below).
+        print("[predict] No historical data — will seed xP from bootstrap ep_next")
+        latest = pd.DataFrame()
+        player_id = "code"
 
     # Training cutoff callout — warn if predicting for a GW the model was trained on.
     _model_gw_match = re.search(r"gw(\d+)", ACTIVE_MODEL.stem, re.IGNORECASE)
@@ -207,9 +210,10 @@ def phase_predict(target_gw: int | None = None):
             "now_cost": e["now_cost"],
         } for e in bootstrap["elements"]])
         # Drop stale metadata; re-join from bootstrap keyed on persistent code.
-        stale = [c for c in ["element", "name", "position", "team", "now_cost"]
-                 if c in latest.columns]
-        latest = latest.drop(columns=stale).merge(bs_df, on="code", how="left")
+        if not latest.empty:
+            stale = [c for c in ["element", "name", "position", "team", "now_cost"]
+                     if c in latest.columns]
+            latest = latest.drop(columns=stale).merge(bs_df, on="code", how="left")
         # No historical data (vaastav not cloned): seed directly from bootstrap with ep_next xP.
         if latest.empty:
             print("[predict] No historical rows — seeding from bootstrap ep_next")

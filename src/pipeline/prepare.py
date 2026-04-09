@@ -47,6 +47,8 @@ def load_live_gw_files(gw_dir: Path) -> pd.DataFrame:
 
 def merge_seasons(dfs: list[pd.DataFrame]) -> pd.DataFrame:
     """Concatenate season DataFrames, taking the union of all columns."""
+    if not dfs:
+        return pd.DataFrame()
     return pd.concat(dfs, ignore_index=True, sort=False)
 
 

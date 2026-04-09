@@ -22,6 +22,8 @@ def add_rolling_features(
     """
     windows = windows or DEFAULT_WINDOWS
     cols = cols or [c for c in ROLLING_COLS if c in df.columns]
+    if df.empty:
+        return df
     # Use persistent player code when available; fall back to seasonal element ID.
     player_id = "code" if "code" in df.columns else "element"
     df = df.sort_values([player_id, "season", "GW"]).copy()
@@ -62,5 +64,7 @@ def engineer_features(
     df = add_form_features(df)
     if drop_na:
         longest_window = max(DEFAULT_WINDOWS)
-        df = df.dropna(subset=[f"total_points_roll_{longest_window}"])
+        roll_col = f"total_points_roll_{longest_window}"
+        if roll_col in df.columns:
+            df = df.dropna(subset=[roll_col])
     return df

@@ -1,12 +1,12 @@
-element,name,position,team,now_cost,xP
-187,Walker,DEF,Burnley,44.0,7.6
-373,Virgil,DEF,Liverpool,63.0,6.47
-449,B.Fernandes,MID,Man Utd,103.0,8.51
-224,Cucurella,DEF,Chelsea,60.0,6.27
-31,G.Jesus,FWD,Arsenal,64.0,7.1
-220,Sánchez,GK,Chelsea,48.0,4.27
-292,Mykolenko,DEF,Everton,49.0,6.59
-82,Semenyo,MID,Man City,82.0,12.04
-452,Amad,MID,Man Utd,62.0,9.37
-169,Gomez,MID,Brighton,49.0,7.08
-163,Hinshelwood,MID,Brighton,51.0,9.81
+element,name,position,team,xP,now_cost,raw_xP
+1,Raya,GK,Arsenal,8.0,60,8.0
+6,Saliba,DEF,Arsenal,12.0,61,12.0
+666,Gyökeres,FWD,Arsenal,8.0,88,8.0
+257,Lacroix,DEF,Crystal Palace,9.0,51,9.0
+261,Richards,DEF,Crystal Palace,10.0,44,10.0
+723,Canvot,DEF,Crystal Palace,11.0,45,11.0
+311,Beto,FWD,Everton,9.0,50,9.0
+416,Bernardo,MID,Man City,9.0,62,9.0
+449,B.Fernandes,MID,Man Utd,12.0,103,12.0
+485,Gordon,MID,Newcastle,10.5,74,10.5
+508,N.Williams,DEF,Nott'm Forest,10.0,47,10.0

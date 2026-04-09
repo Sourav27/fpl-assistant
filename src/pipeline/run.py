@@ -210,6 +210,12 @@ def phase_predict(target_gw: int | None = None):
         stale = [c for c in ["element", "name", "position", "team", "now_cost"]
                  if c in latest.columns]
         latest = latest.drop(columns=stale).merge(bs_df, on="code", how="left")
+        # No historical data (vaastav not cloned): seed directly from bootstrap with ep_next xP.
+        if latest.empty:
+            print("[predict] No historical rows — seeding from bootstrap ep_next")
+            ep_map = {e["code"]: float(e.get("ep_next") or 0) for e in bootstrap["elements"]}
+            latest = bs_df.copy()
+            latest["xP"] = latest["code"].map(ep_map).fillna(0)
         # Drop players not in current bootstrap (retired / transferred abroad).
         in_bootstrap = latest["element"].notna()
         n_excluded = (~in_bootstrap).sum()

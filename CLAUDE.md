@@ -198,3 +198,21 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 
 - **R layer archived**: `src/optimization/` R scripts moved to `_original/optimization/`. Do not restore them.
 - **vaastav data gaps**: 2025-26 season data is not in vaastav. The weekly pipeline bridges this via live FPL API patches, but Understat/FBref features are unavailable for the current season.
+
+---
+
+## CI / Bootstrap Pipeline Notes
+
+### Data input for CI predict
+The bootstrap snapshot (`results/snapshots/bootstrap_gw{N}.json`) is the data input for CI runs. `phase_predict` uses the ML model (downloaded from GitHub Releases) when available; if vaastav data is absent (no clone in CI) or the model is incompatible, it falls back to `ep_next` from the bootstrap snapshot. **Do not try to clone vaastav or backfill live data in CI** — the ep_next fallback is the intended path.
+
+Key code path (`src/pipeline/run.py::phase_predict`):
+- If `build_merged_dataset` returns empty (no vaastav), skips feature engineering entirely
+- Seeds `latest` directly from bootstrap `ep_next` values
+- Model fallback (`_fallback=True`) then uses those ep_next values as xP
+
+### recommend picks the current GW for user squad
+`phase_recommend` is called with `target_gw` = the upcoming GW (e.g. 32). Picks only exist for completed GWs, so `fetch_user_team_state` must use `get_current_gw(bootstrap)` (e.g. 31), not `target_gw`. Fixed in `src/pipeline/run.py::phase_recommend`.
+
+### Multi-GW recommend squad_after is GW1, not horizon end
+`_recommend_multi_gw` returns `squad_after` = the squad after the **first** GW's transfers (`squad[i][0]`), not the end-of-horizon squad. This is what populates the "My Team After Transfers" Discord block. Fixed in `src/pipeline/recommend.py`.

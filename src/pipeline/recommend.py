@@ -407,7 +407,7 @@ def _recommend_multi_gw(
         "squad_after": [
             players.iloc[i]["element"]
             for i in range(n)
-            if lp_value(squad[i][horizon - 1]) is not None and lp_value(squad[i][horizon - 1]) > 0.5
+            if lp_value(squad[i][0]) is not None and lp_value(squad[i][0]) > 0.5
         ],
     }
 

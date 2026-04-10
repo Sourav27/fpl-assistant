@@ -46,7 +46,6 @@ element,code,name,position,team,xP,raw_xP,now_cost
 59,59,Onana,MID,Aston Villa,3.5,3.5,48
 64,64,Watkins,FWD,Aston Villa,4.5,4.5,85
 389,389,Elliott,MID,Aston Villa,0.0,0.0,51
-456,456,Sancho,MID,Aston Villa,1.6500000000000001,2.2,58
 688,688,Wright,GK,Aston Villa,0.0,0.0,39
 699,699,Douglas Luiz,MID,Aston Villa,1.0,1.0,49
 702,702,Burrowes,MID,Aston Villa,0.0,0.0,44
@@ -73,7 +72,6 @@ element,code,name,position,team,xP,raw_xP,now_cost
 202,202,Bruun Larsen,MID,Burnley,0.0,0.0,52
 203,203,Boateng,MID,Burnley,0.0,0.0,47
 206,206,Edwards,MID,Burnley,0.5,0.5,47
-207,207,Hannibal,MID,Burnley,0.6000000000000001,0.8,47
 210,210,Tchaouna,MID,Burnley,0.0,0.0,48
 214,214,Trésor,MID,Burnley,0.0,0.0,43
 215,215,Flemming,FWD,Burnley,4.0,4.0,53
@@ -115,7 +113,7 @@ element,code,name,position,team,xP,raw_xP,now_cost
 799,799,Stevens,MID,Bournemouth,0.0,0.0,45
 801,801,Tóth.A,MID,Bournemouth,0.0,0.0,49
 806,806,Mandas,GK,Bournemouth,0.0,0.0,40
-807,807,Rayan,MID,Bournemouth,1.5,1.5,56
+807,807,Rayan,MID,Bournemouth,1.5,1.5,55
 27,27,Nelson,MID,Brentford,0.5,0.5,48
 83,83,O.Dango,MID,Brentford,4.5,4.5,60
 101,101,Kelleher,GK,Brentford,5.0,5.0,48
@@ -125,7 +123,7 @@ element,code,name,position,team,xP,raw_xP,now_cost
 106,106,Collins,DEF,Brentford,3.0,3.0,49
 107,107,Lewis-Potter,DEF,Brentford,5.0,5.0,48
 108,108,Ajer,DEF,Brentford,0.0,0.0,44
-110,110,Kayode,DEF,Brentford,7.0,7.0,45
+110,110,Kayode,DEF,Brentford,7.0,7.0,46
 111,111,Pinnock,DEF,Brentford,5.0,5.0,42
 113,113,Van den Berg,DEF,Brentford,3.5,3.5,46
 116,116,Hickey,DEF,Brentford,0.0,0.0,40
@@ -258,11 +256,10 @@ element,code,name,position,team,xP,raw_xP,now_cost
 314,314,Leno,GK,Fulham,4.5,4.5,49
 316,316,Robinson,DEF,Fulham,2.5,2.5,49
 317,317,Andersen,DEF,Fulham,5.0,5.0,46
-318,318,Bassey,DEF,Fulham,2.8499999999999996,3.8,44
+318,318,Bassey,DEF,Fulham,5.0,5.0,44
 319,319,Castagne,DEF,Fulham,0.5,0.5,43
 320,320,Diop,DEF,Fulham,0.0,0.0,43
 321,321,J.Cuenca,DEF,Fulham,0.0,0.0,43
-322,322,Tete,DEF,Fulham,1.4249999999999998,1.9,45
 323,323,Amissah,DEF,Fulham,0.0,0.0,38
 324,324,Iwobi,MID,Fulham,1.5,1.5,64
 325,325,Smith Rowe,MID,Fulham,0.0,0.0,56
@@ -272,7 +269,6 @@ element,code,name,position,team,xP,raw_xP,now_cost
 331,331,Cairney,MID,Fulham,0.0,0.0,48
 332,332,Lukić,MID,Fulham,0.0,0.0,49
 335,335,King,MID,Fulham,7.5,7.5,44
-336,336,Reed,MID,Fulham,0.0,0.0,43
 337,337,Raúl,FWD,Fulham,3.0,3.0,62
 338,338,Muniz,FWD,Fulham,1.0,1.0,53
 424,424,Bobb,MID,Fulham,2.0,2.0,51
@@ -287,11 +283,10 @@ element,code,name,position,team,xP,raw_xP,now_cost
 341,341,Darlow,GK,Leeds,5.5,5.5,39
 342,342,Bogle,DEF,Leeds,2.5,2.5,44
 343,343,Struijk,DEF,Leeds,6.0,6.0,43
-344,344,Bijol,DEF,Leeds,8.5,8.5,39
+344,344,Bijol,DEF,Leeds,4.800000000000001,6.4,39
 345,345,Bornauw,DEF,Leeds,0.0,0.0,38
 346,346,Byram,DEF,Leeds,0.0,0.0,37
 347,347,Gudmundsson,DEF,Leeds,0.0,0.0,38
-348,348,Rodon,DEF,Leeds,3.6750000000000003,4.9,39
 350,350,Aaronson,MID,Leeds,1.5,1.5,54
 351,351,Gnonto,MID,Leeds,0.0,0.0,51
 354,354,Ampadu,MID,Leeds,4.5,4.5,49
@@ -300,7 +295,6 @@ element,code,name,position,team,xP,raw_xP,now_cost
 362,362,Piroe,FWD,Leeds,0.0,0.0,49
 365,365,Nmecha,FWD,Leeds,1.0,1.0,50
 493,493,Longstaff,MID,Leeds,0.0,0.0,48
-660,660,Stach,MID,Leeds,1.9500000000000002,2.6,48
 665,665,Perri,GK,Leeds,0.0,0.0,44
 691,691,Calvert-Lewin,FWD,Leeds,0.5,0.5,56
 698,698,Okafor,MID,Leeds,0.0,0.0,55
@@ -488,7 +482,7 @@ element,code,name,position,team,xP,raw_xP,now_cost
 585,585,Bentancur,MID,Spurs,0.0,0.0,52
 586,586,Bergvall,MID,Spurs,0.5,0.5,52
 591,591,Gray,MID,Spurs,2.0,2.0,48
-593,593,P.M.Sarr,MID,Spurs,3.0,3.0,45
+593,593,P.M.Sarr,MID,Spurs,1.6500000000000001,2.2,45
 595,595,Olusesi,MID,Spurs,0.5,0.5,43
 596,596,Solanke,FWD,Spurs,2.0,2.0,72
 597,597,Richarlison,FWD,Spurs,5.5,5.5,63
@@ -527,10 +521,8 @@ element,code,name,position,team,xP,raw_xP,now_cost
 802,802,Lamadrid,MID,West Ham,0.5,0.5,50
 815,815,Disasi,DEF,West Ham,2.0,2.0,45
 825,825,Herrick,GK,West Ham,2.0,2.0,40
-627,627,Johnstone,GK,Wolves,0.0,0.0,44
 628,628,José Sá,GK,Wolves,0.0,0.0,42
 629,629,Bentley,GK,Wolves,0.0,0.0,39
-632,632,Doherty,DEF,Wolves,0.0,0.0,44
 633,633,H.Bueno,DEF,Wolves,0.5,0.5,43
 634,634,Mosquera,DEF,Wolves,0.5,0.5,43
 635,635,R.Gomes,DEF,Wolves,0.5,0.5,44

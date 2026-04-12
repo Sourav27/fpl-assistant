@@ -94,3 +94,61 @@ class TestAppendAccuracyLog:
         df = pd.read_csv(log_path)
         assert len(df) == 2
         assert list(df["gw"]) == [31, 32]
+
+
+class TestSpearmanRho:
+    """Tests for compute_spearman_rho() — B-F7."""
+
+    def test_perfect_rank_correlation(self):
+        from src.pipeline.analysis import compute_spearman_rho
+        import pandas as pd
+        df = pd.DataFrame({
+            "xP": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "actual_points": [2, 4, 6, 8, 10],
+        })
+        rho = compute_spearman_rho(df)
+        assert rho == pytest.approx(1.0, abs=0.01)
+
+    def test_inverse_rank_correlation(self):
+        from src.pipeline.analysis import compute_spearman_rho
+        import pandas as pd
+        df = pd.DataFrame({
+            "xP": [5.0, 4.0, 3.0, 2.0, 1.0],
+            "actual_points": [1, 2, 3, 4, 5],
+        })
+        rho = compute_spearman_rho(df)
+        assert rho == pytest.approx(-1.0, abs=0.01)
+
+    def test_returns_nan_for_empty(self):
+        from src.pipeline.analysis import compute_spearman_rho
+        import pandas as pd
+        rho = compute_spearman_rho(pd.DataFrame({"xP": [], "actual_points": []}))
+        import math
+        assert math.isnan(rho)
+
+    def test_accuracy_log_has_spearman_rho_column(self, tmp_path):
+        from src.pipeline.analysis import append_accuracy_log
+        import pandas as pd
+        log_path = tmp_path / "accuracy_log.csv"
+        picks = pd.DataFrame({
+            "xP": [3.0, 7.0, 2.0],
+            "raw_xP": [3.0, 7.0, 2.0],
+            "actual_points": [4, 8, 1],
+        })
+        append_accuracy_log(
+            gw=32,
+            your_pts=42,
+            your_xp=38.0,
+            recommended_pts=None,
+            recommended_xp=None,
+            wildcard_pts=None,
+            wildcard_xp=None,
+            dream_team_pts=None,
+            benchmarks={"average": 40, "top_player": 60},
+            your_percentile_rank=None,
+            picks_df=picks,
+            path=log_path,
+        )
+        log = pd.read_csv(log_path)
+        assert "spearman_rho" in log.columns
+        assert not pd.isna(log.iloc[0]["spearman_rho"])

@@ -114,3 +114,56 @@ class TestEngineerFeatures:
         assert "transfers_net" in result.columns
         # Should drop rows where rolling features are NaN
         assert not result["total_points_roll_4"].isna().any()
+
+
+class TestFixtureFeatures:
+    """Tests for add_fixture_features() — B-F3."""
+
+    @pytest.fixture
+    def fixture_df(self):
+        """Single player, 3 GWs: normal, BGW (no fixture), DGW (2 fixtures)."""
+        return pd.DataFrame({
+            "code": [1, 1, 1, 1],
+            "season": ["2024-25"] * 4,
+            "GW": [1, 2, 3, 3],             # GW3 has 2 rows (DGW)
+            "was_home": [True, False, True, False],
+            "kickoff_time": [
+                "2024-09-14T15:00:00Z",
+                "2024-09-21T15:00:00Z",
+                "2024-09-28T12:30:00Z",
+                "2024-10-01T19:45:00Z",     # 3 days after fixture 1
+            ],
+            "total_points": [6, 2, 8, 5],
+        })
+
+    def test_is_home_added(self, fixture_df):
+        from src.pipeline.features import add_fixture_features
+        result = add_fixture_features(fixture_df)
+        assert "is_home" in result.columns
+        assert result[result["GW"] == 1].iloc[0]["is_home"] == 1
+
+    def test_fixture_count_normal_gw(self, fixture_df):
+        from src.pipeline.features import add_fixture_features
+        result = add_fixture_features(fixture_df)
+        gw1_rows = result[result["GW"] == 1]
+        assert gw1_rows.iloc[0]["fixture_count"] == 1
+
+    def test_fixture_count_dgw(self, fixture_df):
+        from src.pipeline.features import add_fixture_features
+        result = add_fixture_features(fixture_df)
+        dgw_rows = result[result["GW"] == 3]
+        assert all(dgw_rows["fixture_count"] == 2)
+
+    def test_rest_days_computed_for_fixture_2(self, fixture_df):
+        from src.pipeline.features import add_fixture_features
+        result = add_fixture_features(fixture_df)
+        dgw_rows = result[result["GW"] == 3].sort_values("is_fixture_2")
+        fixture_2 = dgw_rows[dgw_rows["is_fixture_2"] == 1].iloc[0]
+        assert fixture_2["rest_days"] == pytest.approx(3.0, abs=0.5)
+
+    def test_rest_days_zero_for_fixture_1(self, fixture_df):
+        from src.pipeline.features import add_fixture_features
+        result = add_fixture_features(fixture_df)
+        dgw_rows = result[result["GW"] == 3]
+        fixture_1 = dgw_rows[dgw_rows["is_fixture_2"] == 0].iloc[0]
+        assert fixture_1["rest_days"] == 0.0

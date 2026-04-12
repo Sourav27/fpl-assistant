@@ -9,6 +9,10 @@ MODELS_DIR = Path("models")
 PLOTS_DIR = Path("plots")
 SNAPSHOTS_DIR = RESULTS_DIR / "snapshots"
 
+SOURCE_VALIDATION_CSV = RESULTS_DIR / "source_validation.csv"
+SIGNAL_ACCURACY_CSV   = RESULTS_DIR / "signal_accuracy.csv"
+SIGNAL_UNRESOLVED_CSV = RESULTS_DIR / "signal_unresolved.csv"
+
 FPL_API_BASE = "https://fantasy.premierleague.com/api"
 FPL_BOOTSTRAP_URL = f"{FPL_API_BASE}/bootstrap-static/"
 FPL_PLAYER_URL = f"{FPL_API_BASE}/element-summary"  # /{id}/

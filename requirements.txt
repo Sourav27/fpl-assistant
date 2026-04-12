@@ -14,6 +14,11 @@ seaborn>=0.12.0
 # Web scraping (data collection)
 beautifulsoup4>=4.11.0
 requests>=2.28.0
+feedparser>=6.0.0
+
+# Track H data sources
+understatapi>=0.9.0
+soccerdata>=1.4.0
 
 # Jupyter
 jupyter>=1.0.0

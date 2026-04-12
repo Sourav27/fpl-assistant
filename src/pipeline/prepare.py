@@ -21,6 +21,24 @@ def _build_code_map(season: str, vaastav_dir: Path) -> dict:
     return dict(zip(raw["id"], raw["code"]))
 
 
+def _build_team_id_map(season: str, vaastav_dir: Path) -> dict:
+    """Return {seasonal_element_id: numeric_team_id} from players_raw.csv.
+
+    ``opponent_team`` in merged_gw.csv is the numeric team ID; ``team`` is the
+    team name string.  This map lets us add a numeric ``team_id`` column that
+    is join-compatible with ``opponent_team``.  Returns an empty dict when
+    players_raw.csv is absent.
+    """
+    path = vaastav_dir / "data" / season / "players_raw.csv"
+    if not path.exists():
+        return {}
+    try:
+        raw = pd.read_csv(path, usecols=["id", "team"])
+        return dict(zip(raw["id"], raw["team"]))
+    except ValueError:
+        return {}
+
+
 def load_season_gw_data(season: str, vaastav_dir: Path = VAASTAV_DIR) -> pd.DataFrame:
     """Load merged_gw.csv for a single season."""
     path = vaastav_dir / "data" / season / "gws" / "merged_gw.csv"
@@ -33,6 +51,13 @@ def load_season_gw_data(season: str, vaastav_dir: Path = VAASTAV_DIR) -> pd.Data
     if "element" in df.columns:
         code_map = _build_code_map(season, vaastav_dir)
         df["code"] = df["element"].map(code_map) if code_map else df["element"]
+
+        # Attach numeric team_id (same integer space as opponent_team) so that
+        # _compute_team_defensive_stats can group by team_id and join back to
+        # opponent_team without a string/int type mismatch.
+        team_id_map = _build_team_id_map(season, vaastav_dir)
+        if team_id_map:
+            df["team_id"] = df["element"].map(team_id_map)
     return df
 
 
@@ -76,21 +101,30 @@ def _compute_team_defensive_stats(df: pd.DataFrame) -> pd.DataFrame:
 
     Uses shift(1) to prevent lookahead: GW N's stat uses GW 1..(N-1).
     """
-    if df.empty or "goals_conceded" not in df.columns:
+    # Use numeric team_id (same int space as opponent_team) when available so
+    # the merge key in add_opponent_stats is type-compatible.  Fall back to the
+    # string team name only when team_id is absent (should not happen for
+    # seasons >= 2020-21 that have players_raw.csv with a team column).
+    team_col = "team_id" if "team_id" in df.columns else "team"
+
+    if df.empty or "goals_conceded" not in df.columns or team_col not in df.columns:
         return pd.DataFrame(columns=["team", "season", "GW", "team_gc_roll_4"])
 
     team_gw = (
-        df.groupby(["team", "season", "GW"], as_index=False)
+        df.groupby([team_col, "season", "GW"], as_index=False)
         .agg(team_gc=("goals_conceded", "sum"))
     )
+    team_gw = team_gw.rename(columns={team_col: "team"})
     team_gw = team_gw.sort_values(["team", "season", "GW"])
     team_gw["team_gc_roll_4"] = (
         team_gw.groupby(["team", "season"])["team_gc"]
         .transform(lambda s: s.shift(1).rolling(4, min_periods=4).mean())
     )
 
-    # Points allowed per position: average total_points of opponent players by position
-    if "position" in df.columns:
+    # Points allowed per position: average total_points of opponent players by position.
+    # opponent_team is always numeric (int), matching team_id, so these merges are
+    # type-compatible regardless of which team_col was used above.
+    if "position" in df.columns and "opponent_team" in df.columns:
         for pos_label in [1, 2, 3, 4]:
             pos_map = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
             col = f"team_pts_allowed_{pos_map[pos_label]}_roll_6"
@@ -127,6 +161,11 @@ def add_opponent_stats(df: pd.DataFrame) -> pd.DataFrame:
 
     team_stats = _compute_team_defensive_stats(df)
     pos_map = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+
+    if team_stats.empty:
+        df["xGC_rolling_4"] = float("nan")
+        df["opponent_form_rolling_6"] = float("nan")
+        return df
 
     df = df.merge(
         team_stats[["team", "season", "GW", "team_gc_roll_4"]],

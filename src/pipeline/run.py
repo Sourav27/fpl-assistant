@@ -669,11 +669,11 @@ def phase_retrain(target_gw: int | None = None):
         new_path = MODELS_DIR / f"rf_{pos.lower()}_{label}.sav"
         joblib.dump(model, new_path)
         position_results[pos] = {"mae": mae, "rho": rho, "path": new_path, "n": len(pos_df)}
-        print(f"[retrain] {pos}: MAE={mae:.3f}, Spearman ρ={rho:.3f} ({len(pos_df)} rows) → {new_path.name}")
+        print(f"[retrain] {pos}: MAE={mae:.3f}, Spearman rho={rho:.3f} ({len(pos_df)} rows) -> {new_path.name}")
 
     print("\n[retrain] Summary:")
     for pos, r in position_results.items():
-        print(f"  {pos}: MAE={r['mae']:.3f}, ρ={r['rho']:.3f}")
+        print(f"  {pos}: MAE={r['mae']:.3f}, rho={r['rho']:.3f}")
     print(f"\n[retrain] To promote: update ACTIVE_MODELS in src/config.py to point to these files.")
     for pos, r in position_results.items():
         print(f"  '{pos}': MODELS_DIR / '{r['path'].name}'")

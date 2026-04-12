@@ -240,8 +240,30 @@ The following items from the original Track B spec are **not included** in this 
 
 ---
 
+### 💡 Track I — Model Registry & Automated Promotion
+**Status:** BACKLOG · **Effort:** ~2–3 days · **Prerequisite for Track C**
+**Plan:** [`docs/superpowers/plans/2026-04-12-track-i-model-registry-automated-promotion.md`](superpowers/plans/2026-04-12-track-i-model-registry-automated-promotion.md)
+
+**Objective:** Replace the manual model promotion workflow with a fully automated system: walk-forward evaluation on the current season, per-position benchmark comparison, PNG chart generation, and GitHub Release publishing with a manifest that CI reads at runtime. No `config.py` edits needed for promotions.
+
+**Design (brainstormed 2026-04-12):**
+- **Naming:** `{algo}_{pos}_{YYYYMMDD}.sav` — e.g. `rf_gk_20260412.sav`. Season-agnostic.
+- **Metrics ledger:** `models/metrics_history.jsonl` — append-only, one record per position per retrain run. Stores train + test metrics, per-GW ρ, promotion decision.
+- **Benchmark:** `models/benchmark.json` — per-position best-ever test ρ/MAE/hauler MAE. Auto-updates on promotion (ratchets upward only).
+- **Walk-forward evaluation:** Train on all seasons except current (2025-26). For each completed GW in 2025-26: predict xP, compare to actual points → per-GW ρ, MAE, hauler MAE (players scoring ≥5 pts). Aggregate: mean ρ across GWs.
+- **Promotion gate:** Per-position independent. Promote if `test_rho_mean > benchmark_test_rho` for that position.
+- **Charts (PNG, attached to GitHub Release):** ρ history, MAE history, per-GW ρ on test set, feature importance per position.
+- **Release manifest:** `active_models.json` asset in every release. Per-position: which file, algorithm, date, key metrics. CI reads this instead of hardcoded config.
+- **Models folder cleanup:** Legacy files removed. Retention: promoted models only + metrics ledger as provenance.
+
+**New module:** `src/pipeline/promote.py` — all promotion logic isolated here.
+
+**CI change:** `daily_bootstrap.yml` downloads `active_models.json` manifest from latest release, then downloads only the listed `.sav` files. Release tag changes from `gw{N}` → `model-{YYYYMMDD}`.
+
+---
+
 ### 💡 Track C — Quick ML Wins (High Impact, Low Effort)
-**Status:** BACKLOG · **Effort:** ~1 day each
+**Status:** BACKLOG · **Effort:** ~1 day each · **Depends on Track I**
 **Plan:** Not yet written — write plan before starting
 
 | # | ID | What | Why | Effort |

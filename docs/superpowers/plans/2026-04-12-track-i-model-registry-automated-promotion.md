@@ -86,7 +86,7 @@ This is the `fpl-assistant` FPL ML pipeline. Key facts:
 
 Do NOT implement any production code in this task. Write all tests first; run them to confirm they fail for the right reason (`ImportError` or `AttributeError`).
 
-- [ ] **Step 1: Create `tests/test_promote.py` with the following content**
+- [x] **Step 1: Create `tests/test_promote.py` with the following content**
 
 ```python
 # tests/test_promote.py
@@ -408,7 +408,7 @@ class TestGenerateCharts:
             assert Path(path).exists()
 ```
 
-- [ ] **Step 2: Run new tests to confirm they fail for the right reason**
+- [x] **Step 2: Run new tests to confirm they fail for the right reason**
 
 ```bash
 python -m pytest tests/test_promote.py -v 2>&1 | head -30
@@ -416,7 +416,7 @@ python -m pytest tests/test_promote.py -v 2>&1 | head -30
 
 Expected: `ImportError: cannot import name 'compute_metrics' from 'src.pipeline.promote'` (module doesn't exist yet).
 
-- [ ] **Step 3: Confirm existing tests still pass**
+- [x] **Step 3: Confirm existing tests still pass**
 
 ```bash
 python -m pytest tests/ -q --ignore=tests/test_promote.py 2>&1 | tail -5
@@ -424,7 +424,7 @@ python -m pytest tests/ -q --ignore=tests/test_promote.py 2>&1 | tail -5
 
 Expected: `260 passed, 1 skipped`.
 
-- [ ] **Step 4: Commit test shells**
+- [x] **Step 4: Commit test shells**
 
 ```bash
 rtk git add tests/test_promote.py && rtk git commit -m "test: Track I test shells for model registry and automated promotion"
@@ -438,7 +438,7 @@ rtk git add tests/test_promote.py && rtk git commit -m "test: Track I test shell
 - Modify: `src/config.py`
 - Create: `models/benchmark.json`
 
-- [ ] **Step 1: Add constants to `src/config.py`**
+- [x] **Step 1: Add constants to `src/config.py`**
 
 Read `src/config.py` first. After the `SNAPSHOTS_DIR` line, add:
 
@@ -449,7 +449,7 @@ METRICS_LEDGER_PATH = MODELS_DIR / "metrics_history.jsonl"
 CHARTS_DIR          = MODELS_DIR / "charts"
 ```
 
-- [ ] **Step 2: Create `models/benchmark.json`**
+- [x] **Step 2: Create `models/benchmark.json`**
 
 This seeds the benchmark from the GW31 retrain results. Train metrics were not persisted at GW31 retrain time, so they are omitted (null) and will be populated on the next retrain run.
 
@@ -462,7 +462,7 @@ This seeds the benchmark from the GW31 retrain results. Train metrics were not p
 }
 ```
 
-- [ ] **Step 3: Verify and update `.gitignore`**
+- [x] **Step 3: Verify and update `.gitignore`**
 
 `models/` is git-ignored for `.sav` files. `benchmark.json` and `metrics_history.jsonl` must be tracked. Check:
 
@@ -486,7 +486,7 @@ rtk git status models/benchmark.json
 
 Expected: file appears as untracked (not ignored).
 
-- [ ] **Step 5: Add config tests**
+- [x] **Step 5: Add config tests**
 
 In `tests/test_config.py`, add:
 
@@ -504,7 +504,7 @@ def test_charts_dir_is_in_models_dir():
     assert CHARTS_DIR.parent == MODELS_DIR
 ```
 
-- [ ] **Step 6: Run config tests**
+- [x] **Step 6: Run config tests**
 
 ```bash
 python -m pytest tests/test_config.py -v 2>&1 | tail -10
@@ -512,7 +512,7 @@ python -m pytest tests/test_config.py -v 2>&1 | tail -10
 
 Expected: new tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 rtk git add src/config.py models/benchmark.json tests/test_config.py .gitignore && rtk git commit -m "feat: I-F0 add benchmark.json seed and Track I config paths"
@@ -528,7 +528,7 @@ rtk git add src/config.py models/benchmark.json tests/test_config.py .gitignore 
 
 Implement `compute_metrics`, `evaluate_current_season`, and the benchmark operations.
 
-- [ ] **Step 1: Create `src/pipeline/promote.py` with `compute_metrics`**
+- [x] **Step 1: Create `src/pipeline/promote.py` with `compute_metrics`**
 
 ```python
 # src/pipeline/promote.py
@@ -597,7 +597,7 @@ def compute_metrics(df: pd.DataFrame, hauler_threshold: int = _DEFAULT_HAULER_TH
     return {"mae": mae, "rho": rho, "hauler_mae": hauler_mae}
 ```
 
-- [ ] **Step 2: Run compute_metrics tests**
+- [x] **Step 2: Run compute_metrics tests**
 
 ```bash
 python -m pytest tests/test_promote.py::TestComputeMetrics -v
@@ -605,7 +605,7 @@ python -m pytest tests/test_promote.py::TestComputeMetrics -v
 
 Expected: all 5 tests pass.
 
-- [ ] **Step 3: Add `evaluate_current_season` to `promote.py`**
+- [x] **Step 3: Add `evaluate_current_season` to `promote.py`**
 
 ```python
 def evaluate_current_season(
@@ -702,7 +702,7 @@ def evaluate_current_season(
     }
 ```
 
-- [ ] **Step 4: Run `evaluate_current_season` tests**
+- [x] **Step 4: Run `evaluate_current_season` tests**
 
 ```bash
 python -m pytest tests/test_promote.py::TestEvaluateCurrentSeason -v
@@ -710,7 +710,7 @@ python -m pytest tests/test_promote.py::TestEvaluateCurrentSeason -v
 
 Expected: all 4 tests pass.
 
-- [ ] **Step 5: Add benchmark operations to `promote.py`**
+- [x] **Step 5: Add benchmark operations to `promote.py`**
 
 ```python
 def load_benchmark(path: Path) -> dict:
@@ -790,7 +790,7 @@ def update_benchmark(path: Path, position: str, metrics: dict, existing: dict) -
     path.write_text(json.dumps(updated, indent=2))
 ```
 
-- [ ] **Step 6: Run benchmark tests**
+- [x] **Step 6: Run benchmark tests**
 
 ```bash
 python -m pytest tests/test_promote.py::TestBenchmarkOperations -v
@@ -798,13 +798,13 @@ python -m pytest tests/test_promote.py::TestBenchmarkOperations -v
 
 Expected: all 9 tests pass (7 original + 2 new: MAE degradation + min_test_gws guard).
 
-- [ ] **Step 7: Run full test suite**
+- [x] **Step 7: Run full test suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 rtk git add src/pipeline/promote.py && rtk git commit -m "feat: I-F1 compute_metrics, evaluate_current_season, benchmark operations"
@@ -818,7 +818,7 @@ rtk git add src/pipeline/promote.py && rtk git commit -m "feat: I-F1 compute_met
 - Modify: `src/pipeline/promote.py`
 - Test: `tests/test_promote.py`
 
-- [ ] **Step 1: Add `append_metrics_ledger` and `build_active_models_manifest` to `promote.py`**
+- [x] **Step 1: Add `append_metrics_ledger` and `build_active_models_manifest` to `promote.py`**
 
 ```python
 def append_metrics_ledger(path: Path, record: dict) -> None:
@@ -854,7 +854,7 @@ def build_active_models_manifest(promoted: dict, published_date: str) -> dict:
     return {"published": published_date, "models": models_block}
 ```
 
-- [ ] **Step 2: Run ledger and manifest tests**
+- [x] **Step 2: Run ledger and manifest tests**
 
 ```bash
 python -m pytest tests/test_promote.py::TestMetricsLedger tests/test_promote.py::TestBuildManifest -v
@@ -862,7 +862,7 @@ python -m pytest tests/test_promote.py::TestMetricsLedger tests/test_promote.py:
 
 Expected: all 5 tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 rtk git add src/pipeline/promote.py && rtk git commit -m "feat: I-F2 metrics ledger append and active_models manifest builder"
@@ -878,7 +878,7 @@ rtk git add src/pipeline/promote.py && rtk git commit -m "feat: I-F2 metrics led
 
 Charts use `matplotlib`. It is already in `requirements.txt` (used elsewhere). Do NOT add it as a new dependency.
 
-- [ ] **Step 1: Verify matplotlib is available**
+- [x] **Step 1: Verify matplotlib is available**
 
 ```bash
 python -c "import matplotlib; print(matplotlib.__version__)"
@@ -886,7 +886,7 @@ python -c "import matplotlib; print(matplotlib.__version__)"
 
 If missing, add `matplotlib>=3.7` to `requirements.txt`.
 
-- [ ] **Step 2: Add `generate_charts` to `promote.py`**
+- [x] **Step 2: Add `generate_charts` to `promote.py`**
 
 Add to top-level imports: `import matplotlib; matplotlib.use("Agg")` (non-interactive backend for CI).
 
@@ -1027,7 +1027,7 @@ def generate_charts(
     return generated
 ```
 
-- [ ] **Step 3: Run chart tests**
+- [x] **Step 3: Run chart tests**
 
 ```bash
 python -m pytest tests/test_promote.py::TestGenerateCharts -v
@@ -1035,13 +1035,13 @@ python -m pytest tests/test_promote.py::TestGenerateCharts -v
 
 Expected: 1 test passes; PNG files are created.
 
-- [ ] **Step 4: Run full suite**
+- [x] **Step 4: Run full suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add src/pipeline/promote.py && rtk git commit -m "feat: I-F3 generate_charts (rho history, MAE history, per-GW rho, feature importance)"
@@ -1056,7 +1056,7 @@ rtk git add src/pipeline/promote.py && rtk git commit -m "feat: I-F3 generate_ch
 
 This is the top-level function that `phase_retrain()` calls. It orchestrates the full flow and calls `gh release create`.
 
-- [ ] **Step 1: Add `publish_release` and `run_promotion_pipeline` to `promote.py`**
+- [x] **Step 1: Add `publish_release` and `run_promotion_pipeline` to `promote.py`**
 
 ```python
 def publish_release(
@@ -1311,7 +1311,7 @@ def run_promotion_pipeline(
     return summary
 ```
 
-- [ ] **Step 2: Run full test suite**
+- [x] **Step 2: Run full test suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
@@ -1319,7 +1319,7 @@ python -m pytest tests/ -q 2>&1 | tail -5
 
 Expected: 260 passed, 1 skipped + new promote tests all passing.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 rtk git add src/pipeline/promote.py && rtk git commit -m "feat: I-F4 run_promotion_pipeline orchestrator and publish_release"
@@ -1332,11 +1332,11 @@ rtk git add src/pipeline/promote.py && rtk git commit -m "feat: I-F4 run_promoti
 **Files:**
 - Modify: `src/pipeline/run.py`
 
-- [ ] **Step 1: Read the current `phase_retrain()` in `src/pipeline/run.py`**
+- [x] **Step 1: Read the current `phase_retrain()` in `src/pipeline/run.py`**
 
 Find the function (search for `def phase_retrain`). Note where models are saved with `joblib.dump`.
 
-- [ ] **Step 2: Update `phase_retrain()` imports and model naming**
+- [x] **Step 2: Update `phase_retrain()` imports and model naming**
 
 At the top of the function, after the existing imports, add:
 
@@ -1366,7 +1366,7 @@ model = RandomForestRegressor(n_estimators=100, ..., oob_score=True)
 
 where `algorithm = "rf"` (hardcoded for now; Track C will parameterise this).
 
-- [ ] **Step 3: Collect trained models dict and call `run_promotion_pipeline`**
+- [x] **Step 3: Collect trained models dict and call `run_promotion_pipeline`**
 
 After the training loop, add:
 
@@ -1398,13 +1398,13 @@ Also update the result dict to store the model object:
 position_results[pos] = {"mae": mae, "rho": rho, "path": new_path, "n": len(pos_df), "model": model}
 ```
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 5: Smoke test the retrain import chain**
+- [x] **Step 5: Smoke test the retrain import chain**
 
 ```bash
 python -c "from src.pipeline.run import phase_retrain; print('import ok')"
@@ -1412,7 +1412,7 @@ python -c "from src.pipeline.run import phase_retrain; print('import ok')"
 
 Expected: `import ok`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 rtk git add src/pipeline/run.py && rtk git commit -m "feat: I-F5 wire run_promotion_pipeline into phase_retrain with date-based naming"
@@ -1427,11 +1427,11 @@ rtk git add src/pipeline/run.py && rtk git commit -m "feat: I-F5 wire run_promot
 - Create: `scripts/download_models_from_manifest.py`
 - Modify: `src/config.py`
 
-- [ ] **Step 1: Read the current model-download step in `.github/workflows/daily_bootstrap.yml`**
+- [x] **Step 1: Read the current model-download step in `.github/workflows/daily_bootstrap.yml`**
 
 Find the step that runs `gh release list` and `gh release download`. Note the exact step name and commands.
 
-- [ ] **Step 2: Create `scripts/download_models_from_manifest.py`**
+- [x] **Step 2: Create `scripts/download_models_from_manifest.py`**
 
 The inline-Python-in-heredoc pattern used previously is broken (shell can't pass `$LATEST` as `sys.argv[1]` through a heredoc). Extract to a standalone script:
 
@@ -1485,7 +1485,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 3: Replace the CI model-download step**
+- [x] **Step 3: Replace the CI model-download step**
 
 Replace the existing model download step with:
 
@@ -1511,7 +1511,7 @@ Replace the existing model download step with:
     ls models/*.sav 2>/dev/null || echo "No .sav files downloaded"
 ```
 
-- [ ] **Step 4: Update `src/config.py` — lazy manifest loading**
+- [x] **Step 4: Update `src/config.py` — lazy manifest loading**
 
 Running `_load_active_models_from_manifest()` at module import time creates test isolation problems (any `models/active_models.json` on the developer machine silently overrides `ACTIVE_MODELS`) and races with the CI download step. Use a lazy function instead:
 
@@ -1541,13 +1541,13 @@ def get_active_models() -> dict:
 
 > **Note:** Callers in `predict.py` that reference `ACTIVE_MODELS` directly must be updated to call `get_active_models()` instead. Check `predict.py` for `ACTIVE_MODELS` references and replace.
 
-- [ ] **Step 5: Run full test suite**
+- [x] **Step 5: Run full test suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 rtk git add .github/workflows/daily_bootstrap.yml scripts/download_models_from_manifest.py src/config.py && rtk git commit -m "feat: I-F6 CI reads active_models.json manifest; lazy get_active_models() in config"
@@ -1560,7 +1560,7 @@ rtk git add .github/workflows/daily_bootstrap.yml scripts/download_models_from_m
 **Files:**
 - No new production files
 
-- [ ] **Step 1: Identify legacy model files to remove**
+- [x] **Step 1: Identify legacy model files to remove**
 
 ```bash
 ls models/*.sav
@@ -1576,13 +1576,13 @@ Legacy files to remove (three generations that predate the GW31 named files):
 
 Keep: `rf_gk_20260412.sav`, `rf_def_20260412.sav`, `rf_mid_20260412.sav`, `rf_fwd_20260412.sav`, `benchmark.json`, `metrics_history.jsonl`.
 
-- [ ] **Step 2: Remove legacy files**
+- [x] **Step 2: Remove legacy files**
 
 ```bash
 cd D:/FPL/fpl-assistant && rm models/rf_model.sav models/rf_model_gk.sav models/rf_model_def.sav models/rf_model_mid.sav models/rf_model_fwd.sav models/xgb_model.sav models/xgb_model_gk.sav models/xgb_model_def.sav models/xgb_model_mid.sav models/xgb_model_fwd.sav models/rf_model_gw31.sav models/benchmark_gw31.json 2>/dev/null; ls models/
 ```
 
-- [ ] **Step 3: Verify models/ only contains current promoted files**
+- [x] **Step 3: Verify models/ only contains current promoted files**
 
 ```bash
 ls models/
@@ -1590,13 +1590,13 @@ ls models/
 
 Expected: `rf_gk_20260412.sav  rf_def_20260412.sav  rf_mid_20260412.sav  rf_fwd_20260412.sav  benchmark.json  metrics_history.jsonl  charts/`
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add -A models/ && rtk git commit -m "chore: clean up legacy model files; retain only GW31 date-named per-position models"
@@ -1610,7 +1610,7 @@ rtk git add -A models/ && rtk git commit -m "chore: clean up legacy model files;
 - Modify: `CLAUDE.md`
 - Modify: `docs/improvements-roadmap.md`
 
-- [ ] **Step 1: Update `CLAUDE.md` Model Promotion section**
+- [x] **Step 1: Update `CLAUDE.md` Model Promotion section**
 
 Replace the existing "Model Promotion via GitHub Releases" subsection with:
 
@@ -1651,11 +1651,11 @@ for line in Path('models/metrics_history.jsonl').read_text().splitlines():
 ```
 ```
 
-- [ ] **Step 2: Update roadmap Track I status**
+- [x] **Step 2: Update roadmap Track I status**
 
 In `docs/improvements-roadmap.md`, change Track I status from `BACKLOG` to `COMPLETE (2026-04-12)` and add test count.
 
-- [ ] **Step 3: Publish initial `model-20260412` release with current models**
+- [ ] **Step 3: Publish initial `model-20260412` release with current models** *(manual step — run after branch is merged)*
 
 This creates the first release under the new naming convention:
 
@@ -1713,7 +1713,7 @@ print('Release:', url)
 "
 ```
 
-- [ ] **Step 4: Run full test suite one final time**
+- [x] **Step 4: Run full test suite one final time**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
@@ -1721,7 +1721,7 @@ python -m pytest tests/ -q 2>&1 | tail -5
 
 Expected: 260+ passed.
 
-- [ ] **Step 5: Final commit and push**
+- [x] **Step 5: Final commit and push**
 
 ```bash
 rtk git add CLAUDE.md docs/improvements-roadmap.md && rtk git commit -m "docs: update model promotion docs and mark Track I complete"

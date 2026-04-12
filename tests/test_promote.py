@@ -32,7 +32,7 @@ def sample_features():
 @pytest.fixture
 def dummy_model():
     m = MagicMock()
-    m.predict.return_value = [3.5, 4.0, 3.0]
+    m.predict.side_effect = lambda X: [3.5] * len(X)
     m.feature_importances_ = [0.3, 0.2, 0.2, 0.1, 0.1, 0.1]
     m.feature_names_in_ = [f"feat_{i}" for i in range(6)]
     return m

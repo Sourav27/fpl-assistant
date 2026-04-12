@@ -75,22 +75,33 @@ jobs:
           print(f"Discord notified (HTTP {r.status_code})")
           EOF
 
-      - name: Download model from GitHub Releases
+      - name: Download models from latest release
         id: model_download
         if: steps.deadline_check.outputs.deadline_approaching == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p models
-          LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "")
-          if [ -z "$LATEST_TAG" ]; then
+          # gh release list returns reverse-chronological order; take first match
+          LATEST=$(gh release list --limit 20 --json tagName \
+            --jq '[.[] | select(.tagName | test("^model-|^gw"))][0].tagName')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
             echo "No GitHub Release found — predict/recommend will use ep_next fallback."
             echo "model_available=false" >> $GITHUB_OUTPUT
           else
-            echo "Downloading model from release: $LATEST_TAG"
-            gh release download "$LATEST_TAG" --pattern "*.sav" --dir models/ --clobber
+            echo "Latest release: $LATEST"
+            mkdir -p models
+
+            # Try to download active_models.json manifest
+            if gh release download "$LATEST" --pattern "active_models.json" --dir models --clobber 2>/dev/null; then
+              echo "Manifest found — downloading listed model files"
+              python scripts/download_models_from_manifest.py "$LATEST"
+            else
+              echo "No manifest — falling back to downloading all *.sav files"
+              gh release download "$LATEST" --pattern "*.sav" --dir models --clobber
+            fi
+            ls models/*.sav 2>/dev/null || echo "No .sav files downloaded"
             echo "model_available=true" >> $GITHUB_OUTPUT
-            echo "model_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+            echo "model_tag=$LATEST" >> $GITHUB_OUTPUT
           fi
 
       - name: Write user_config.yaml

@@ -4,7 +4,7 @@ import joblib
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from src.config import ACTIVE_MODEL, ACTIVE_MODELS
+from src.config import ACTIVE_MODEL, ACTIVE_MODELS, get_active_models
 from src.pipeline.features import FIXTURE_FEATURE_COLUMNS
 
 
@@ -70,7 +70,7 @@ def load_position_models(models_config: dict | None = None) -> dict:
     models_config defaults to ACTIVE_MODELS from config.
     """
     if models_config is None:
-        models_config = ACTIVE_MODELS
+        models_config = get_active_models()
     result = {}
     for pos, path in models_config.items():
         if path is not None and Path(path).exists():

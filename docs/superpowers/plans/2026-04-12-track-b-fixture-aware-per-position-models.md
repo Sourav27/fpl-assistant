@@ -1,6 +1,6 @@
 # Track B — Fixture-Aware Per-Position Models Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 >
 > **Agent type:** This plan is optimised for the **data-scientist** subagent. All code is Python/pandas/scikit-learn within the `src/pipeline/` production package.
 
@@ -54,7 +54,7 @@ This is the `fpl-assistant` Fantasy Premier League ML pipeline. Key facts:
 
 Write failing tests first. Do NOT implement any production code in this task.
 
-- [ ] **Step 1: Create `tests/test_prepare_opponent_stats.py`**
+- [x] **Step 1: Create `tests/test_prepare_opponent_stats.py`**
 
 ```python
 # tests/test_prepare_opponent_stats.py
@@ -160,7 +160,7 @@ class TestOpponentFormByPosition:
             assert gk_gw8["opponent_form_rolling_6"] != pytest.approx(fwd_gw8["opponent_form_rolling_6"], abs=0.5)
 ```
 
-- [ ] **Step 2: Append fixture feature tests to `tests/test_features.py`**
+- [x] **Step 2: Append fixture feature tests to `tests/test_features.py`**
 
 Add this class at the bottom of the existing file:
 
@@ -218,7 +218,7 @@ class TestFixtureFeatures:
         assert fixture_1["rest_days"] == 0.0
 ```
 
-- [ ] **Step 3: Append to `tests/test_analysis.py`**
+- [x] **Step 3: Append to `tests/test_analysis.py`**
 
 Add at the bottom:
 
@@ -281,7 +281,7 @@ class TestSpearmanRho:
         assert not pd.isna(log.iloc[0]["spearman_rho"])
 ```
 
-- [ ] **Step 4: Create `tests/test_predict_position.py`**
+- [x] **Step 4: Create `tests/test_predict_position.py`**
 
 ```python
 # tests/test_predict_position.py
@@ -428,7 +428,7 @@ def test_phase_predict_expands_dgw_player_to_two_rows():
     pass
 ```
 
-- [ ] **Step 5: Run all new tests to confirm they fail for the right reason**
+- [x] **Step 5: Run all new tests to confirm they fail for the right reason**
 
 ```bash
 python -m pytest tests/test_prepare_opponent_stats.py tests/test_predict_position.py -v 2>&1 | head -40
@@ -446,7 +446,7 @@ Expected failures:
 - `TestSpearmanRho::test_perfect_rank_correlation` — `ImportError: cannot import name 'compute_spearman_rho'` ✓
 - `TestSpearmanRho::test_accuracy_log_has_spearman_rho_column` — may also fail with `TypeError: append_accuracy_log() got an unexpected keyword argument 'picks_df'` — this is **also expected** because Task 7 adds `picks_df` to that function's signature. Both failure modes are acceptable at this stage.
 
-- [ ] **Step 6: Confirm existing 208 tests still pass**
+- [x] **Step 6: Confirm existing 208 tests still pass**
 
 ```bash
 python -m pytest tests/ -q --ignore=tests/test_prepare_opponent_stats.py --ignore=tests/test_predict_position.py 2>&1 | tail -5
@@ -454,7 +454,7 @@ python -m pytest tests/ -q --ignore=tests/test_prepare_opponent_stats.py --ignor
 
 Expected: `208 passed` (or same count as before).
 
-- [ ] **Step 7: Commit test shells**
+- [x] **Step 7: Commit test shells**
 
 ```bash
 rtk git add tests/test_prepare_opponent_stats.py tests/test_predict_position.py tests/test_features.py tests/test_analysis.py
@@ -471,7 +471,7 @@ rtk git commit -m "test: add B-F8 test shells for Track B fixture-aware per-posi
 
 The goal is to compute per-team rolling goals-conceded and average points allowed to each position, then join them onto each player row as `xGC_rolling_4` and `opponent_form_rolling_6`. This uses only vaastav data — no external dependency on Understat.
 
-- [ ] **Step 1: Add `_compute_team_defensive_stats()` to `prepare.py`**
+- [x] **Step 1: Add `_compute_team_defensive_stats()` to `prepare.py`**
 
 Add this function after the existing `add_fixture_difficulty()` function:
 
@@ -578,7 +578,7 @@ def add_opponent_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df
 ```
 
-- [ ] **Step 2: Call `add_opponent_stats` inside `build_merged_dataset`**
+- [x] **Step 2: Call `add_opponent_stats` inside `build_merged_dataset`**
 
 After the `add_fixture_difficulty` call (around line 100 of `prepare.py`), add:
 
@@ -588,7 +588,7 @@ After the `add_fixture_difficulty` call (around line 100 of `prepare.py`), add:
             df = add_opponent_stats(df)
 ```
 
-- [ ] **Step 3: Run the opponent stats tests**
+- [x] **Step 3: Run the opponent stats tests**
 
 ```bash
 python -m pytest tests/test_prepare_opponent_stats.py -v
@@ -596,13 +596,13 @@ python -m pytest tests/test_prepare_opponent_stats.py -v
 
 Expected: All tests pass. If `TestOpponentFormByPosition` fails because positional data is integer (1/2/3/4), fix the position comparison in `add_opponent_stats`.
 
-- [ ] **Step 4: Run full suite to confirm no regressions**
+- [x] **Step 4: Run full suite to confirm no regressions**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add src/pipeline/prepare.py tests/test_prepare_opponent_stats.py
@@ -618,7 +618,7 @@ rtk git commit -m "feat: B-F1/B-F2 opponent defensive stats (xGC_rolling_4, oppo
 - Modify: `src/pipeline/predict.py`
 - Test: `tests/test_config.py`
 
-- [ ] **Step 1: Add `ACTIVE_MODELS` to `src/config.py`**
+- [x] **Step 1: Add `ACTIVE_MODELS` to `src/config.py`**
 
 Find the line `ACTIVE_MODEL = MODELS_DIR / "rf_model_gw31.sav"` and add below it:
 
@@ -634,7 +634,7 @@ ACTIVE_MODELS = {
 
 Keep `ACTIVE_MODEL` — it's still used by `run.py` for backward compat until Task 6.
 
-- [ ] **Step 2: Add config test**
+- [x] **Step 2: Add config test**
 
 In `tests/test_config.py`, add:
 
@@ -650,7 +650,7 @@ def test_active_models_values_are_paths():
         assert isinstance(path, Path), f"{pos} model path must be a Path"
 ```
 
-- [ ] **Step 3: Run config tests**
+- [x] **Step 3: Run config tests**
 
 ```bash
 python -m pytest tests/test_config.py -v
@@ -658,7 +658,7 @@ python -m pytest tests/test_config.py -v
 
 Expected: New tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 rtk git add src/config.py tests/test_config.py
@@ -675,7 +675,7 @@ rtk git commit -m "feat: B-F5 add ACTIVE_MODELS dict to config for per-position 
 
 Add `add_fixture_features()` which enriches each row (which may already be per-fixture after DGW expansion in prepare) with `is_home`, `fixture_count`, `rest_days`, `is_fixture_2`.
 
-- [ ] **Step 1: Add `add_fixture_features()` to `features.py`**
+- [x] **Step 1: Add `add_fixture_features()` to `features.py`**
 
 Add before `engineer_features()`:
 
@@ -738,7 +738,7 @@ def add_fixture_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 ```
 
-- [ ] **Step 2: Call `add_fixture_features` from `engineer_features`**
+- [x] **Step 2: Call `add_fixture_features` from `engineer_features`**
 
 In `engineer_features()`, add after `add_form_features(df)`:
 
@@ -748,7 +748,7 @@ In `engineer_features()`, add after `add_form_features(df)`:
 
 Also update the `FEATURE_COLUMNS` export in `features.py` — add a note that full feature list is `FEATURE_COLUMNS + FIXTURE_FEATURE_COLUMNS` (don't merge them yet — predict.py will use them selectively by position).
 
-- [ ] **Step 3: Run fixture feature tests**
+- [x] **Step 3: Run fixture feature tests**
 
 ```bash
 python -m pytest tests/test_features.py::TestFixtureFeatures -v
@@ -756,13 +756,13 @@ python -m pytest tests/test_features.py::TestFixtureFeatures -v
 
 Expected: All 5 tests pass.
 
-- [ ] **Step 4: Run full suite**
+- [x] **Step 4: Run full suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add src/pipeline/features.py tests/test_features.py
@@ -779,7 +779,7 @@ rtk git commit -m "feat: B-F3 add_fixture_features (is_home, fixture_count, rest
 
 This is the core routing logic. Add `predict_next_gw_per_position()` which takes a DataFrame where DGW players have 2 rows, routes each row to the correct position model, clips negatives, then sums per player (aggregating DGW).
 
-- [ ] **Step 1: Update `predict.py` imports and feature column list**
+- [x] **Step 1: Update `predict.py` imports and feature column list**
 
 At the top of `predict.py`, update:
 
@@ -795,7 +795,7 @@ Add after `FEATURE_COLUMNS`:
 ALL_FEATURE_COLUMNS = FEATURE_COLUMNS + FIXTURE_FEATURE_COLUMNS
 ```
 
-- [ ] **Step 2: Add `load_position_models()` helper**
+- [x] **Step 2: Add `load_position_models()` helper**
 
 ```python
 def load_position_models(models_config: dict | None = None) -> dict:
@@ -815,7 +815,7 @@ def load_position_models(models_config: dict | None = None) -> dict:
     return result
 ```
 
-- [ ] **Step 3: Add `predict_next_gw_per_position()`**
+- [x] **Step 3: Add `predict_next_gw_per_position()`**
 
 ```python
 def predict_next_gw_per_position(
@@ -900,7 +900,7 @@ def predict_next_gw_per_position(
     return result
 ```
 
-- [ ] **Step 4: Run position routing tests**
+- [x] **Step 4: Run position routing tests**
 
 ```bash
 python -m pytest tests/test_predict_position.py -v
@@ -908,13 +908,13 @@ python -m pytest tests/test_predict_position.py -v
 
 Expected: All 4 tests pass.
 
-- [ ] **Step 5: Run full suite**
+- [x] **Step 5: Run full suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 rtk git add src/pipeline/predict.py tests/test_predict_position.py
@@ -930,7 +930,7 @@ rtk git commit -m "feat: B-F4 per-position predict with DGW aggregation and ep_n
 
 Update `phase_retrain()` to train 4 position-specific RF models, save them with position suffixes, and print per-position MAE + Spearman ρ.
 
-- [ ] **Step 1: Confirm `ALL_FEATURE_COLUMNS` is defined in `predict.py` (from Task 5)**
+- [x] **Step 1: Confirm `ALL_FEATURE_COLUMNS` is defined in `predict.py` (from Task 5)**
 
 `ALL_FEATURE_COLUMNS = FEATURE_COLUMNS + FIXTURE_FEATURE_COLUMNS` **must live in `predict.py` only.** `FEATURE_COLUMNS` is in `predict.py`; `FIXTURE_FEATURE_COLUMNS` is in `features.py`. Putting `ALL_FEATURE_COLUMNS` in `features.py` would require importing from `predict.py` → circular import. Do NOT add it to `features.py`.
 
@@ -942,7 +942,7 @@ python -c "from src.pipeline.predict import ALL_FEATURE_COLUMNS; print(len(ALL_F
 
 Expected: `24 features — import ok` (18 base + 6 fixture). Fix any `ImportError` before proceeding.
 
-- [ ] **Step 2: Update `run.py` imports**
+- [x] **Step 2: Update `run.py` imports**
 
 ```python
 from src.config import (
@@ -957,7 +957,7 @@ from src.pipeline.predict import (
 )
 ```
 
-- [ ] **Step 3: Replace `phase_retrain()` in `run.py`**
+- [x] **Step 3: Replace `phase_retrain()` in `run.py`**
 
 Find the existing `phase_retrain` function (starts at approx line 602) and replace it entirely:
 
@@ -1015,7 +1015,7 @@ def phase_retrain(target_gw: int | None = None):
         print(f"  '{pos}': MODELS_DIR / '{r['path'].name}'")
 ```
 
-- [ ] **Step 2: Run the retrain smoke test (dry run with tiny dataset)**
+- [x] **Step 2: Run the retrain smoke test (dry run with tiny dataset)**
 
 ```bash
 python -c "
@@ -1029,13 +1029,13 @@ print('import ok')
 
 Expected: `FIXTURE_FEATURE_COLUMNS: ['xGC_rolling_4', ...]` — no import error.
 
-- [ ] **Step 3: Run full test suite**
+- [x] **Step 3: Run full test suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 rtk git add src/pipeline/run.py src/pipeline/features.py src/pipeline/predict.py
@@ -1050,7 +1050,7 @@ rtk git commit -m "feat: B-F6 retrain phase trains 4 per-position RF models with
 - Modify: `src/pipeline/analysis.py`
 - Test: `tests/test_analysis.py`
 
-- [ ] **Step 1: Add `compute_spearman_rho()` to `analysis.py`**
+- [x] **Step 1: Add `compute_spearman_rho()` to `analysis.py`**
 
 Add after the existing imports:
 
@@ -1072,7 +1072,7 @@ def compute_spearman_rho(picks_df: pd.DataFrame) -> float:
     return float(rho) if not math.isnan(rho) else float("nan")
 ```
 
-- [ ] **Step 2: Update `append_accuracy_log()` to include spearman_rho**
+- [x] **Step 2: Update `append_accuracy_log()` to include spearman_rho**
 
 Find the `append_accuracy_log` function. Identify where it builds the `row` dict and adds the `"your_pts"`, `"your_xp"` etc. columns. Add `"spearman_rho"` to the row dict:
 
@@ -1084,7 +1084,7 @@ Find the `append_accuracy_log` function. Identify where it builds the `row` dict
     }
 ```
 
-- [ ] **Step 3: Run Spearman tests**
+- [x] **Step 3: Run Spearman tests**
 
 ```bash
 python -m pytest tests/test_analysis.py::TestSpearmanRho -v
@@ -1092,7 +1092,7 @@ python -m pytest tests/test_analysis.py::TestSpearmanRho -v
 
 Expected: All 4 tests pass.
 
-- [ ] **Step 4: Run full suite**
+- [x] **Step 4: Run full suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
@@ -1100,7 +1100,7 @@ python -m pytest tests/ -q 2>&1 | tail -5
 
 Expected: all tests pass (count should be at least 208 + new tests added across all tasks).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add src/pipeline/analysis.py tests/test_analysis.py
@@ -1116,7 +1116,7 @@ rtk git commit -m "feat: B-F7 Spearman rho in compute_spearman_rho and accuracy_
 
 Replace the call to `predict_next_gw(...)` in `phase_predict()` with the new per-position function. Keep the old function as a fallback path if all 4 models are missing.
 
-- [ ] **Step 1: Update `phase_predict()` to use per-position prediction**
+- [x] **Step 1: Update `phase_predict()` to use per-position prediction**
 
 In `run.py`, update the import:
 
@@ -1162,7 +1162,7 @@ Find the block in `phase_predict` where `predict_next_gw` is called (look for `p
 
 Note: `_seed_from_ep_next` is the existing logic already in `phase_predict` — factor it out as a helper if needed.
 
-- [ ] **Step 2: Run the integration smoke test**
+- [x] **Step 2: Run the integration smoke test**
 
 ```bash
 python -m pytest tests/test_integration_replay.py -v 2>&1 | tail -20
@@ -1170,13 +1170,13 @@ python -m pytest tests/test_integration_replay.py -v 2>&1 | tail -20
 
 Expected: Tests pass (they use cached GW30/31 snapshots and ep_next fallback — position models won't exist yet, so the fallback path runs).
 
-- [ ] **Step 3: Run full test suite**
+- [x] **Step 3: Run full test suite**
 
 ```bash
 python -m pytest tests/ -q 2>&1 | tail -5
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 rtk git add src/pipeline/run.py
@@ -1189,7 +1189,7 @@ rtk git commit -m "feat: B-F3 wire per-position prediction into phase_predict wi
 
 Skip this task in CI. Run locally after full retrain.
 
-- [ ] **Step 1: Retrain all 4 models**
+- [x] **Step 1: Retrain all 4 models**
 
 ```bash
 python -m src.pipeline.run retrain --gw 31
@@ -1197,9 +1197,9 @@ python -m src.pipeline.run retrain --gw 31
 
 Expected output: 4 lines like `GK: MAE=0.xxx, Spearman ρ=0.xxx`.
 
-- [ ] **Step 2: Update `ACTIVE_MODELS` in `src/config.py`** with the paths printed by retrain.
+- [x] **Step 2: Update `ACTIVE_MODELS` in `src/config.py`** with the paths printed by retrain.
 
-- [ ] **Step 3: Run predict**
+- [x] **Step 3: Run predict**
 
 ```bash
 python -m src.pipeline.run predict --gw 32
@@ -1207,7 +1207,7 @@ python -m src.pipeline.run predict --gw 32
 
 Check `results/predictions_gw32.csv` — verify it has all 4 positions and non-trivial xP variance.
 
-- [ ] **Step 4: Verify success gate**
+- [x] **Step 4: Verify success gate**
 
 Targets from the roadmap:
 - Spearman ρ ≥ 0.65 (top-200k quality)
@@ -1215,11 +1215,11 @@ Targets from the roadmap:
 
 If ρ < 0.65 or MAE > 1.035, do NOT panic — check per-position breakdowns from the retrain output. The GK position historically achieves ρ ~0.77 due to clean sheet predictability; MID/FWD are harder.
 
-- [ ] **Step 5: Update roadmap status**
+- [x] **Step 5: Update roadmap status**
 
 In `docs/improvements-roadmap.md`, update Track B status from `SPEC READY` to `COMPLETE (YYYY-MM-DD)` and record test count.
 
-- [ ] **Step 6: Final commit**
+- [x] **Step 6: Final commit**
 
 ```bash
 rtk git add src/config.py docs/improvements-roadmap.md

@@ -112,12 +112,55 @@ python -m src.pipeline.run post-gw
 ---
 
 ### ✅ Track B — Fixture-Aware Per-Position Models
-**Status:** COMPLETE (2026-04-12) · **Tests:** 259 passing
+**Status:** COMPLETE (2026-04-12) · **Tests:** 260 passing (1 skipped — B-F3-DGW deferred)
 **Plan:** [`docs/superpowers/plans/2026-04-12-track-b-fixture-aware-per-position-models.md`](superpowers/plans/2026-04-12-track-b-fixture-aware-per-position-models.md)
+**Benchmark:** `models/benchmark_gw31.json` — all future retrains must meet or beat per-position figures.
 
 **Objective:** Replace the single global RF model with 4 per-position RF models (GK/DEF/MID/FWD), each trained with fixture-aware features. Switch primary evaluation metric from MAE to Spearman rank correlation (ρ). Handle DGW/BGW with per-fixture prediction and aggregation.
 
 **Success gate:** Spearman ρ ≥ 0.65 on held-out GWs (top-200k quality). Secondary: overall MAE must not worsen vs global RF baseline (1.035). Each position model must beat or match the global model for that position's players.
+
+#### GW31 Retrain Results
+
+| Position | MAE | Spearman ρ | Training rows | ρ target (≥0.65) | MAE target (≤1.035) |
+|----------|-----|-----------|---------------|-----------------|---------------------|
+| GK  | 0.724 | 0.742 | 13,065 | ✅ | ✅ |
+| DEF | 1.189 | 0.613 | 40,091 | ❌ | ❌ |
+| MID | 1.085 | 0.717 | 50,835 | ✅ | ❌ |
+| FWD | 1.266 | 0.721 | 14,405 | ✅ | ❌ |
+
+GK meets both targets. DEF is the priority for future improvement (ρ below threshold). MID/FWD have strong rank-ordering (ρ > 0.70) but elevated MAE driven by haul-concentration.
+
+#### Feature Importance Findings
+
+**Universal signals (all 4 positions):**
+- `minutes_roll_4` — dominant gating signal everywhere (31.8% for GK, 7–15% for outfield). Availability before everything else.
+- `transfers_net` — 2nd–3rd across all models. Acts as a leading indicator: market outflows signal rotation risk or injury before on-pitch stats reflect it.
+- `xGC_rolling_4` — strongest Track B feature, 8th–11th across all models (~4.5% each). The one new fixture feature pulling genuine weight.
+
+**Position-specific dominant patterns:**
+- **GK:** `minutes_roll_4` (31.8%) dominates — binary play/no-play structure means availability is everything. `transfers_net` (11.2%) picks up rotation risk early.
+- **DEF:** `influence_roll_4` + `creativity_roll_4` + `threat_roll_4` in the top 5 — the model has learned to predict *attacking full-backs*, not defensive solidity. `clean_sheets_roll_4` ranks 19th (0.71%) — the clean sheet signal is effectively lost.
+- **MID:** `ict_index_roll_4` (23.5%) — the single largest feature importance across all 4 models. ICT captures goals, assists, and bonus in one composite that outperforms raw goal/assist counts due to multicollinearity.
+- **FWD:** `minutes_momentum` uniquely in the top 5 — the only position where trending minutes matters, correctly capturing forward rotation and pecking-order dynamics.
+
+**Track B fixture feature report card:**
+| Feature | Avg rank | Verdict |
+|---------|---------|---------|
+| `xGC_rolling_4` | 9/24 | ✅ Working — retain and invest |
+| `is_home` | 17/24 | Marginal but real |
+| `rest_days` | 18/24 | Weak; better as interaction with `minutes_momentum` |
+| `fixture_count` | 21/24 | Redundant by design (DGW rows summed before this is needed) |
+| `is_fixture_2` | 22/24 | Near-zero — safe to drop |
+| `opponent_form_rolling_6` | 24/24 | ❌ Zero importance all positions — drop; superseded by `xGC_rolling_4` |
+
+#### DEF underperformance diagnosis (ρ = 0.613)
+
+The DEF model has a structural clean sheet prediction gap. `total_points_roll_4` (rank 16, 2.6%) is the lowest across all positions — total points is noisy for defenders because it swings between "clean sheet + bonus" weeks and blank weeks. The model compensates by leaning on ICT sub-components (influence, creativity, threat) as form proxies, but these don't predict clean sheets at all. Three actionable fixes for next cycle:
+
+1. **Forward-looking opponent xG** — add scheduled fixture difficulty based on upcoming opponent xG, not trailing form. This is what `opponent_form_rolling_6` was trying to be.
+2. **CB vs FB sub-models** — DEF covers 5 heterogeneous archetypes. Splitting by CB/FB (using creativity percentile or position code) would likely push ρ above 0.65.
+3. **Drop `opponent_form_rolling_6` and `is_fixture_2`** — zero-importance features adding noise with no predictive value.
 
 #### Design: Approach C — Per-Position Models
 

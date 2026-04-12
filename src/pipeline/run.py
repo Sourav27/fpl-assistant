@@ -628,11 +628,15 @@ def phase_recommend(
 
 def phase_retrain(target_gw: int | None = None):
     """Phase 4: Retrain 4 per-position RF models on full dataset (manual trigger)."""
+    from datetime import date as _date
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.model_selection import train_test_split
     from sklearn.metrics import mean_absolute_error
     from scipy.stats import spearmanr
     import joblib
+    from src.pipeline.promote import run_promotion_pipeline
+    from src.config import (BENCHMARK_PATH, METRICS_LEDGER_PATH,
+                             CHARTS_DIR, CURRENT_SEASON)
 
     print("[retrain] Building full feature-engineered dataset...")
     merged = build_merged_dataset(vaastav_dir=VAASTAV_DIR)
@@ -645,7 +649,8 @@ def phase_retrain(target_gw: int | None = None):
 
     feature_cols = [c for c in ALL_FEATURE_COLUMNS if c in features.columns]
 
-    label = f"gw{target_gw}" if target_gw else datetime.now().strftime("%Y%m%d_%H%M%S")
+    date_str = _date.today().strftime("%Y%m%d")
+    algorithm = "rf"
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
     position_results = {}
@@ -659,24 +664,41 @@ def phase_retrain(target_gw: int | None = None):
         y = pos_df["total_points"]
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+        model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1, oob_score=True)
         model.fit(X_train, y_train)
 
         y_pred = model.predict(X_test)
         mae = mean_absolute_error(y_test, y_pred)
         rho, _ = spearmanr(y_pred, y_test)
 
-        new_path = MODELS_DIR / f"rf_{pos.lower()}_{label}.sav"
+        new_path = MODELS_DIR / f"{algorithm}_{pos.lower()}_{date_str}.sav"
         joblib.dump(model, new_path)
-        position_results[pos] = {"mae": mae, "rho": rho, "path": new_path, "n": len(pos_df)}
+        position_results[pos] = {"mae": mae, "rho": rho, "path": new_path, "n": len(pos_df), "model": model}
         print(f"[retrain] {pos}: MAE={mae:.3f}, Spearman rho={rho:.3f} ({len(pos_df)} rows) -> {new_path.name}")
 
     print("\n[retrain] Summary:")
     for pos, r in position_results.items():
         print(f"  {pos}: MAE={r['mae']:.3f}, rho={r['rho']:.3f}")
-    print(f"\n[retrain] To promote: update ACTIVE_MODELS in src/config.py to point to these files.")
-    for pos, r in position_results.items():
-        print(f"  '{pos}': MODELS_DIR / '{r['path'].name}'")
+
+    if position_results:
+        print("\n[retrain] Running promotion pipeline...")
+        trained_models = {
+            pos: (r["model"], r["path"])
+            for pos, r in position_results.items()
+            if "model" in r
+        }
+        run_promotion_pipeline(
+            trained_models=trained_models,
+            algorithm=algorithm,
+            features_df=features,
+            feature_cols=feature_cols,
+            date_str=date_str,
+            model_dir=MODELS_DIR,
+            benchmark_path=BENCHMARK_PATH,
+            ledger_path=METRICS_LEDGER_PATH,
+            charts_dir=CHARTS_DIR,
+            current_season=CURRENT_SEASON,
+        )
 
 
 def main():

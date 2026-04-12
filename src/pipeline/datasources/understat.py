@@ -1,87 +1,154 @@
-"""understatAPI client — PL xG, xA, xGC per player per GW (EPL only).
+"""Understat client — unique xg_chain + xg_buildup per player per GW (PL only).
 
-understatAPI covers 6 leagues: EPL, La_Liga, Bundesliga, Serie_A, Ligue_1, RFPL.
-It does NOT cover Champions League, Europa League, or international matches.
+Uses soccerdata.Understat (synchronous). Drops all columns that overlap with
+FPL API (xg, xa, goals, assists, shots, key_passes, yellow_cards, red_cards).
 
-asyncio note: asyncio.run() raises RuntimeError if called inside an already-running
-event loop (e.g. Jupyter, FastAPI). For CLI pipeline use only. In async contexts,
-await _fetch_player_grouped_stats_async() directly.
+Season format: 4-digit string "YYXX" where YY = start year, XX = end year.
+    "2425" → 2024-25 season
+    "2324" → 2023-24 season
 
-xGC derivation: For each fixture, sum xG of all opponent players against the
-defending team. This gives team-level xGC per match.
+Date → GW mapping uses the FPL fixtures API so blank/double GWs are handled
+correctly. Multiple fixtures on the same date are resolved by taking the lower
+GW number.
 """
 from __future__ import annotations
-import asyncio
+
 import logging
+from typing import Any
+
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-UNDERSTAT_SEASON_MAP = {
-    "2025-26": "2025",
-    "2024-25": "2024",
-    "2023-24": "2023",
-    "2022-23": "2022",
-    "2021-22": "2021",
+# Maps 4-digit season codes to human-readable labels. Exported for test assertions.
+SEASON_FORMAT_EXAMPLES: dict[str, str] = {
+    "2122": "2021-22",
+    "2223": "2022-23",
+    "2324": "2023-24",
+    "2425": "2024-25",
+    "2526": "2025-26",
 }
 
+# Columns from soccerdata Understat that overlap with FPL API — must be dropped.
+_FPL_OVERLAP_COLS = frozenset(
+    {"xg", "xa", "goals", "assists", "shots", "key_passes", "yellow_cards", "red_cards"}
+)
 
-async def _fetch_player_grouped_stats_async(season: str) -> list[dict]:
-    """Async inner — fetch per-player per-match stats from understatAPI.
+# soccerdata league name for PL
+_SD_LEAGUE = "ENG-Premier League"
 
-    Each entry contains: player_id, player, team, xG, xA, time, date,
-    id (fixture), h_team, a_team, and other understat fields.
+
+def _make_understat_reader(season: str):
+    """Factory for soccerdata.Understat reader. Isolated for patching in tests."""
+    import soccerdata as sd  # type: ignore[import-untyped]
+
+    return sd.Understat(leagues=_SD_LEAGUE, seasons=season)
+
+
+def _fetch_fixtures_for_season(season: str) -> list[dict[str, Any]]:
+    """Fetch FPL fixtures for season to build date → GW map.
+
+    Calls the live FPL fixtures API. Each fixture has at minimum:
+        event (int | None)   — GW number (None for unscheduled)
+        kickoff_time (str)   — ISO 8601 datetime string
     """
-    from understatapi import UnderstatClient
-    async with UnderstatClient() as client:
-        data = await client.league(league="EPL").get_player_data(season=season)
-    return data
+    import urllib.request
+    import json
+
+    url = "https://fantasy.premierleague.com/api/fixtures/"
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        return json.loads(resp.read())
 
 
-def fetch_understat_player_gw_stats(season: str = "2025") -> pd.DataFrame:
-    """Return a DataFrame of per-player per-match xG/xA stats for the given season.
+def _current_understat_season() -> str:
+    """Return the current soccerdata season code, e.g. '2526'. Isolated for patching."""
+    import datetime
+
+    now = datetime.date.today()
+    # Season starts in August; before August we are still in the previous season
+    if now.month >= 8:
+        start = now.year
+    else:
+        start = now.year - 1
+    end = start + 1
+    return f"{str(start)[2:]}{str(end)[2:]}"
+
+
+def build_date_gw_map(fixtures: list[dict[str, Any]]) -> dict[str, int]:
+    """Build a date → GW mapping from raw FPL fixture dicts.
 
     Args:
-        season: Understat season string, e.g. "2025" for 2025-26.
+        fixtures: List of FPL fixture dicts with 'event' and 'kickoff_time' fields.
 
-    Columns: player_id, player, team, xG (float), xA (float), time (int),
-             date (str), fixture_id (str), h_team, a_team
+    Returns:
+        Dict mapping "YYYY-MM-DD" date strings to GW numbers.
+        For dates with multiple fixtures (DGW), the lower GW number is used.
     """
-    raw = asyncio.run(_fetch_player_grouped_stats_async(season))
-    df = pd.DataFrame(raw)
-    df = df.rename(columns={"id": "fixture_id"})
-    for col in ("xG", "xA"):
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-    df["time"] = pd.to_numeric(df["time"], errors="coerce").fillna(0).astype(int)
-    return df
+    date_gw: dict[str, int] = {}
+    for fixture in fixtures:
+        event = fixture.get("event")
+        kickoff = fixture.get("kickoff_time")
+        if event is None or kickoff is None:
+            continue
+        date = kickoff[:10]  # "YYYY-MM-DD"
+        gw = int(event)
+        # On DGW dates, take the lower GW number
+        if date not in date_gw or gw < date_gw[date]:
+            date_gw[date] = gw
+    return date_gw
 
 
-def compute_team_xgc_per_gw(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute team-level xG created per fixture from player-level xG rows.
+def fetch_understat_xg_chain(season: str = "2425") -> pd.DataFrame:
+    """Return per-player per-GW xg_chain and xg_buildup for the given PL season.
 
-    For each fixture, a team's xGC = sum of xG from all players on that team.
-    To find what a team conceded, look at the opposing team's row in the same
-    fixture_id group.
+    Args:
+        season: 4-digit season code, e.g. "2425" for 2024-25.
 
-    Returns DataFrame with columns: fixture_id, team, xGC
+    Returns:
+        DataFrame with columns: player, team, gw, xg_chain, xg_buildup.
+        One row per player per match played.
+
+    Warns:
+        If season is not the current season, logs a WARNING about historical
+        GW mapping accuracy (FPL fixtures API returns current-season fixtures only).
     """
-    if df.empty:
-        return pd.DataFrame(columns=["fixture_id", "team", "xGC"])
+    current = _current_understat_season()
+    if season != current:
+        logger.warning(
+            "fetch_understat_xg_chain: season '%s' is historical (current: '%s'). "
+            "GW mapping uses the live FPL fixtures API which only covers the current "
+            "season — historical GW assignment may be inaccurate.",
+            season,
+            current,
+        )
 
-    # Accept either the raw "id" column (pre-rename) or the canonical "fixture_id"
-    if "fixture_id" not in df.columns and "id" in df.columns:
-        df = df.rename(columns={"id": "fixture_id"})
+    reader = _make_understat_reader(season)
+    raw: pd.DataFrame = reader.read_player_match_stats()
 
-    rows = []
-    for fixture_id, group in df.groupby("fixture_id"):
-        h_team = group["h_team"].iloc[0]
-        a_team = group["a_team"].iloc[0]
-        # xGC per team = sum of xG created by that team's players in this fixture.
-        # Downstream, a team's xGC represents how threatening their attack was;
-        # the opponent's row holds what they conceded.
-        home_xg = group[group["team"] == h_team]["xG"].sum()
-        away_xg = group[group["team"] == a_team]["xG"].sum()
-        rows.append({"fixture_id": fixture_id, "team": h_team, "xGC": home_xg})
-        rows.append({"fixture_id": fixture_id, "team": a_team, "xGC": away_xg})
+    # soccerdata returns a MultiIndex: (league, season, game, team, player)
+    df = raw.reset_index()
 
-    return pd.DataFrame(rows)
+    # Extract date from game string e.g. "2024-08-16 Arsenal-Wolves"
+    df["match_date"] = df["game"].str[:10]
+
+    # Fetch date → GW map
+    fixtures = _fetch_fixtures_for_season(season)
+    date_gw = build_date_gw_map(fixtures)
+
+    df["gw"] = df["match_date"].map(date_gw)  # type: ignore[arg-type]
+
+    # Drop FPL-overlapping columns
+    cols_to_drop = [c for c in df.columns if c in _FPL_OVERLAP_COLS]
+    df = df.drop(columns=cols_to_drop)
+
+    # Drop soccerdata index cols we don't need
+    for col in ("league", "season", "game", "match_date"):
+        if col in df.columns:
+            df = df.drop(columns=[col])
+
+    # Ensure the two unique columns we care about are present
+    for required in ("xg_chain", "xg_buildup"):
+        if required not in df.columns:
+            df[required] = 0.0
+
+    return df[["player", "team", "gw", "xg_chain", "xg_buildup"]]  # type: ignore[return-value]

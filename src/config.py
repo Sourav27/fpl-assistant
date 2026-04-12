@@ -9,6 +9,11 @@ MODELS_DIR = Path("models")
 PLOTS_DIR = Path("plots")
 SNAPSHOTS_DIR = RESULTS_DIR / "snapshots"
 
+# Model registry paths (Track I)
+BENCHMARK_PATH      = MODELS_DIR / "benchmark.json"
+METRICS_LEDGER_PATH = MODELS_DIR / "metrics_history.jsonl"
+CHARTS_DIR          = MODELS_DIR / "charts"
+
 SOURCE_VALIDATION_CSV = RESULTS_DIR / "source_validation.csv"
 SIGNAL_ACCURACY_CSV   = RESULTS_DIR / "signal_accuracy.csv"
 SIGNAL_UNRESOLVED_CSV = RESULTS_DIR / "signal_unresolved.csv"
@@ -101,6 +106,27 @@ ACTIVE_MODELS = {
     "MID": MODELS_DIR / "rf_mid_gw31.sav",
     "FWD": MODELS_DIR / "rf_fwd_gw31.sav",
 }
+
+def get_active_models() -> dict:
+    """Return the active per-position model paths.
+
+    Checks for models/active_models.json at call time (not import time).
+    Falls back to the hardcoded ACTIVE_MODELS dict if the manifest is absent
+    or malformed. Use this instead of referencing ACTIVE_MODELS directly in
+    predict.py and run.py to pick up promotions without restarting.
+    """
+    import json as _json
+
+    manifest_path = MODELS_DIR / "active_models.json"
+    if manifest_path.exists():
+        try:
+            data = _json.loads(manifest_path.read_text())
+            return {pos: MODELS_DIR / info["file"]
+                    for pos, info in data.get("models", {}).items()}
+        except Exception:
+            pass
+    return dict(ACTIVE_MODELS)
+
 
 SQUAD_RULES = {
     "squad_size": 15,

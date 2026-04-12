@@ -240,8 +240,8 @@ The following items from the original Track B spec are **not included** in this 
 
 ---
 
-### 💡 Track I — Model Registry & Automated Promotion
-**Status:** BACKLOG · **Effort:** ~2–3 days · **Prerequisite for Track C**
+### ✅ Track I — Model Registry & Automated Promotion
+**Status:** COMPLETE (2026-04-13) · 24 new tests · **Prerequisite for Track C**
 **Plan:** [`docs/superpowers/plans/2026-04-12-track-i-model-registry-automated-promotion.md`](superpowers/plans/2026-04-12-track-i-model-registry-automated-promotion.md)
 
 **Objective:** Replace the manual model promotion workflow with a fully automated system: walk-forward evaluation on the current season, per-position benchmark comparison, PNG chart generation, and GitHub Release publishing with a manifest that CI reads at runtime. No `config.py` edits needed for promotions.

@@ -106,24 +106,38 @@ ACTIVE_MODEL = MODELS_DIR / "rf_model_gw<N>.sav"
 ```
 If the model file is missing or has mismatched feature names, the pipeline automatically falls back to FPL API `ep_next` values.
 
-### Model Promotion via GitHub Releases
+### Model Promotion via GitHub Releases (Track I — Automated)
 
-The daily GitHub Actions workflow downloads the model from the latest GitHub Release before running predict. To promote a newly retrained model:
+Promotion is now **fully automated** by `src/pipeline/promote.py`. Running `retrain` triggers the full pipeline:
 
+1. Walk-forward evaluation on current season (per-GW ρ, MAE, hauler MAE)
+2. Per-position benchmark comparison against `models/benchmark.json`
+3. Positions that improve test ρ are promoted; others retain the current best model
+4. Charts generated to `models/charts/` and attached to GitHub Release
+5. `active_models.json` manifest published as a release asset
+6. CI reads the manifest to download only the promoted model files
+
+**Release tag format:** `model-YYYYMMDD` (e.g. `model-20260412`)
+
+**Manual promotion (if needed):**
 ```bash
-# 1. Retrain locally
 python -m src.pipeline.run retrain --gw <N>
+```
+No further steps needed — the pipeline handles benchmarking, release, and manifest automatically.
 
-# 2. Create a GitHub Release with the model as an asset
-gh release create "gw<N>" models/rf_model_gw<N>.sav \
-  --title "Model GW<N>" \
-  --notes "Retrained after GW<N> with <M> seasons of data."
-
-# 3. Update ACTIVE_MODEL in src/config.py for local runs
-# ACTIVE_MODEL = MODELS_DIR / "rf_model_gw<N>.sav"
+**To inspect the benchmark:**
+```bash
+cat models/benchmark.json
 ```
 
-The workflow downloads all `*.sav` assets from the latest release tagged `gw*`. The release tag must start with `gw` (e.g., `gw34`, `gw35`). `gh release list` returns releases in reverse chronological order — the first result is used.
+**To view metrics history:**
+```python
+import json
+from pathlib import Path
+for line in Path('models/metrics_history.jsonl').read_text().splitlines():
+    r = json.loads(line)
+    print(f"{r['date']} {r['position']}: test_rho={r['test_rho']:.3f} promoted={r['promoted']}")
+```
 
 **Secrets required (set in GitHub repo → Settings → Secrets):**
 - `DISCORD_PRICE_CHANGE_WEBHOOK_URL` — daily price-change notifications (rename from `DISCORD_WEBHOOK_URL`)

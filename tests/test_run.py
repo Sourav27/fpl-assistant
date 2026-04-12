@@ -135,13 +135,16 @@ class TestPhaseRetrain:
         with patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
              patch("src.pipeline.run.MODELS_DIR", models_dir), \
              patch("src.pipeline.run.ACTIVE_MODEL", models_dir / "rf_model.sav"), \
-             patch("src.pipeline.run.CURRENT_SEASON", "2025-26"):
+             patch("src.pipeline.run.CURRENT_SEASON", "2025-26"), \
+             patch("src.pipeline.promote.run_promotion_pipeline") as mock_promote:
             phase_retrain(target_gw=32)
 
-        # Track B: retrain now saves per-position models.
-        # With all test data as "MID" position (100 rows), at least rf_mid_gw32.sav must exist.
-        saved_models = list(models_dir.glob("rf_*_gw32.sav"))
+        # Track I: retrain now saves per-position models with date-based naming.
+        # With all test data as "MID" position (100 rows), at least one rf_mid_*.sav must exist.
+        saved_models = list(models_dir.glob("rf_mid_*.sav"))
         assert len(saved_models) >= 1, f"Expected at least one per-position model, found: {list(models_dir.iterdir())}"
+        # Track I: promotion pipeline must be called with the trained models
+        assert mock_promote.called, "run_promotion_pipeline should be called after training"
 
 
 class TestRecommendPhase:

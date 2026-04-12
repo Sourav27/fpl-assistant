@@ -46,3 +46,16 @@ def test_active_models_values_are_paths():
     from pathlib import Path
     for pos, path in ACTIVE_MODELS.items():
         assert isinstance(path, Path), f"{pos} model path must be a Path"
+
+
+def test_benchmark_path_is_in_models_dir():
+    from src.config import BENCHMARK_PATH, MODELS_DIR
+    assert BENCHMARK_PATH.parent == MODELS_DIR
+
+def test_metrics_ledger_path_is_in_models_dir():
+    from src.config import METRICS_LEDGER_PATH, MODELS_DIR
+    assert METRICS_LEDGER_PATH.parent == MODELS_DIR
+
+def test_charts_dir_is_in_models_dir():
+    from src.config import CHARTS_DIR, MODELS_DIR
+    assert CHARTS_DIR.parent == MODELS_DIR

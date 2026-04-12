@@ -1,0 +1,6 @@
+{
+  "GK":  {"model_file": "rf_gk_gw31.sav",  "algorithm": "rf", "date": "2026-04-12", "train_mae": null, "train_rho": null, "train_hauler_mae": null, "test_mae": 0.724, "test_rho": 0.742, "test_hauler_mae": null, "test_gw_count": null},
+  "DEF": {"model_file": "rf_def_gw31.sav",  "algorithm": "rf", "date": "2026-04-12", "train_mae": null, "train_rho": null, "train_hauler_mae": null, "test_mae": 1.189, "test_rho": 0.613, "test_hauler_mae": null, "test_gw_count": null},
+  "MID": {"model_file": "rf_mid_gw31.sav",  "algorithm": "rf", "date": "2026-04-12", "train_mae": null, "train_rho": null, "train_hauler_mae": null, "test_mae": 1.085, "test_rho": 0.717, "test_hauler_mae": null, "test_gw_count": null},
+  "FWD": {"model_file": "rf_fwd_gw31.sav",  "algorithm": "rf", "date": "2026-04-12", "train_mae": null, "train_rho": null, "train_hauler_mae": null, "test_mae": 1.266, "test_rho": 0.721, "test_hauler_mae": null, "test_gw_count": null}
+}

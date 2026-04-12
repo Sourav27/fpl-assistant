@@ -263,3 +263,26 @@ def test_cross_verify_consistent():
     fpl_status = {80201: "d"}
     result = cross_verify_against_fpl([signal], fpl_status)
     assert result[0]["contradicted"] is False
+
+
+def test_source_column_map_importable():
+    from src.pipeline.datasources import SOURCE_COLUMN_MAP
+    assert isinstance(SOURCE_COLUMN_MAP, dict)
+    required_keys = {"fpl_post_gw", "fpl_pre_gw", "understat", "espn",
+                     "fpl_news", "premierinjuries", "ffs", "reddit"}
+    assert required_keys.issubset(SOURCE_COLUMN_MAP.keys())
+
+
+def test_source_column_map_fpl_post_gw_has_required_columns():
+    from src.pipeline.datasources import SOURCE_COLUMN_MAP
+    cols = SOURCE_COLUMN_MAP["fpl_post_gw"]["columns"]
+    for col in ["minutes", "goals_scored", "assists", "expected_goals"]:
+        assert col in cols
+    assert "xg_chain" not in cols, "xg_chain must not be in fpl_post_gw — Understat owns it"
+    assert "xg_buildup" not in cols, "xg_buildup must not be in fpl_post_gw — Understat owns it"
+
+
+def test_source_column_map_understat_only_unique_cols():
+    from src.pipeline.datasources import SOURCE_COLUMN_MAP
+    cols = SOURCE_COLUMN_MAP["understat"]["columns"]
+    assert cols == ["xg_chain", "xg_buildup"]

@@ -67,6 +67,102 @@ def add_fixture_difficulty(gw_df: pd.DataFrame, fixtures_path: Path) -> pd.DataF
     return df
 
 
+def _compute_team_defensive_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute team-level defensive rolling stats for opponent join.
+
+    Returns a team-season-GW indexed DataFrame with:
+      - team_gc_roll_4: 4-GW lagged rolling avg goals conceded
+      - team_pts_allowed_{pos}_roll_6: 6-GW lagged rolling avg points allowed to each position
+
+    Uses shift(1) to prevent lookahead: GW N's stat uses GW 1..(N-1).
+    """
+    if df.empty or "goals_conceded" not in df.columns:
+        return pd.DataFrame(columns=["team", "season", "GW", "team_gc_roll_4"])
+
+    team_gw = (
+        df.groupby(["team", "season", "GW"], as_index=False)
+        .agg(team_gc=("goals_conceded", "sum"))
+    )
+    team_gw = team_gw.sort_values(["team", "season", "GW"])
+    team_gw["team_gc_roll_4"] = (
+        team_gw.groupby(["team", "season"])["team_gc"]
+        .transform(lambda s: s.shift(1).rolling(4, min_periods=4).mean())
+    )
+
+    # Points allowed per position: average total_points of opponent players by position
+    if "position" in df.columns:
+        for pos_label in [1, 2, 3, 4]:
+            pos_map = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+            col = f"team_pts_allowed_{pos_map[pos_label]}_roll_6"
+            pos_df = df[df["position"] == pos_label].copy()
+            if pos_df.empty:
+                team_gw[col] = float("nan")
+                continue
+            opp_agg = (
+                pos_df.groupby(["opponent_team", "season", "GW"], as_index=False)
+                .agg(pts_allowed=("total_points", "mean"))
+                .rename(columns={"opponent_team": "team"})
+            )
+            opp_agg = opp_agg.sort_values(["team", "season", "GW"])
+            opp_agg[col] = (
+                opp_agg.groupby(["team", "season"])["pts_allowed"]
+                .transform(lambda s: s.shift(1).rolling(6, min_periods=3).mean())
+            )
+            team_gw = team_gw.merge(opp_agg[["team", "season", "GW", col]], on=["team", "season", "GW"], how="left")
+
+    return team_gw
+
+
+def add_opponent_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Join opponent defensive stats onto each player row.
+
+    Adds columns:
+      - xGC_rolling_4: rolling goals conceded by the OPPONENT team
+      - opponent_form_rolling_6: avg pts allowed by opponent to this player's position (6-GW rolling)
+    """
+    if df.empty or "opponent_team" not in df.columns:
+        df["xGC_rolling_4"] = float("nan")
+        df["opponent_form_rolling_6"] = float("nan")
+        return df
+
+    team_stats = _compute_team_defensive_stats(df)
+    pos_map = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+
+    df = df.merge(
+        team_stats[["team", "season", "GW", "team_gc_roll_4"]],
+        left_on=["opponent_team", "season", "GW"],
+        right_on=["team", "season", "GW"],
+        how="left",
+        suffixes=("", "_opp"),
+    )
+    df = df.rename(columns={"team_gc_roll_4": "xGC_rolling_4"})
+    df = df.drop(columns=["team_opp"], errors="ignore")
+
+    if "position" in df.columns:
+        df["_pos_label"] = df["position"].map(pos_map) if df["position"].dtype == object else df["position"].map(pos_map)
+        df["opponent_form_rolling_6"] = float("nan")
+        for pos_label, pos_str in pos_map.items():
+            col = f"team_pts_allowed_{pos_str}_roll_6"
+            if col not in team_stats.columns:
+                continue
+            pos_mask = df["position"] == pos_label
+            if not pos_mask.any():
+                continue
+            temp = df[pos_mask].merge(
+                team_stats[["team", "season", "GW", col]],
+                left_on=["opponent_team", "season", "GW"],
+                right_on=["team", "season", "GW"],
+                how="left",
+                suffixes=("", "_opp2"),
+            )
+            df.loc[pos_mask, "opponent_form_rolling_6"] = temp[col].values
+        df = df.drop(columns=["_pos_label"], errors="ignore")
+    else:
+        df["opponent_form_rolling_6"] = float("nan")
+
+    return df
+
+
 def build_merged_dataset(
     seasons: list[str] | None = None,
     vaastav_dir: Path = VAASTAV_DIR,
@@ -98,6 +194,11 @@ def build_merged_dataset(
         fixtures_path = vaastav_dir / "data" / season / "fixtures.csv"
         if fixtures_path.exists():
             df = add_fixture_difficulty(df, fixtures_path)
+
+        # B-F1/B-F2: join opponent defensive stats
+        if not df.empty and "opponent_team" in df.columns:
+            df = add_opponent_stats(df)
+
         dfs.append(df)
 
     return merge_seasons(dfs)

@@ -34,3 +34,15 @@ def test_availability_constants():
     assert "n" in AVAILABILITY_HARD_EXCLUDE_STATUS
     assert 0 in AVAILABILITY_HARD_EXCLUDE_CHANCE
     assert 25 in AVAILABILITY_HARD_EXCLUDE_CHANCE
+
+
+def test_active_models_has_all_positions():
+    from src.config import ACTIVE_MODELS
+    assert set(ACTIVE_MODELS.keys()) == {"GK", "DEF", "MID", "FWD"}
+
+
+def test_active_models_values_are_paths():
+    from src.config import ACTIVE_MODELS
+    from pathlib import Path
+    for pos, path in ACTIVE_MODELS.items():
+        assert isinstance(path, Path), f"{pos} model path must be a Path"

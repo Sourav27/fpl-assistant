@@ -20,7 +20,7 @@ import pandas as pd
 
 from src.config import (
     VAASTAV_DIR, RESULTS_DIR, MODELS_DIR, CURRENT_SEASON,
-    ACTIVE_MODEL, BOOTSTRAP_MAX_AGE_HOURS, SNAPSHOTS_DIR,
+    ACTIVE_MODEL, ACTIVE_MODELS, BOOTSTRAP_MAX_AGE_HOURS, SNAPSHOTS_DIR,
     FPL_ENTRY_URL, load_user_config, UserConfigError,
 )
 from src.pipeline.fetch import (
@@ -37,7 +37,10 @@ from src.pipeline.analysis import (
     format_post_match_summary, append_accuracy_log,
 )
 from src.pipeline.features import engineer_features
-from src.pipeline.predict import predict_next_gw, get_feature_columns, save_full_predictions, apply_xp_corrections
+from src.pipeline.predict import (
+    predict_next_gw, get_feature_columns, save_full_predictions, apply_xp_corrections,
+    load_position_models, predict_next_gw_per_position, ALL_FEATURE_COLUMNS,
+)
 from src.pipeline.availability import filter_availability
 from src.pipeline.optimize import optimize_team
 
@@ -237,34 +240,58 @@ def phase_predict(target_gw: int | None = None):
         latest["now_cost"] = latest["element"].map(cost_map).fillna(latest["now_cost"])
 
     print("[predict] Generating predictions...")
-    model_path = ACTIVE_MODEL
-    _fallback = False
-    if not model_path.exists():
-        print(f"[predict] WARNING: Model not found at {model_path}. Using xP from API.")
-        _fallback = True
-    else:
-        try:
-            predictions = predict_next_gw(latest, model_path)
-        except ValueError as e:
-            print(
-                f"[predict] WARNING: Stale model at {model_path} is incompatible "
-                f"({e}). Run `retrain` to rebuild. Falling back to API xP."
-            )
-            _fallback = True
 
-    if _fallback:
-        if target_gw:
-            xp_path = VAASTAV_DIR / "data" / CURRENT_SEASON / "gws" / f"xP{target_gw}.csv"
-            if xp_path.exists():
-                xp_df = pd.read_csv(xp_path)
-                latest = latest.merge(
-                    xp_df.rename(columns={"id": "element"}),
-                    on="element", how="left", suffixes=("_feat", ""),
+    # Attempt per-position prediction (Track B)
+    pos_models = load_position_models()
+    any_model_available = any(m is not None for m in pos_models.values())
+
+    if any_model_available and not latest.empty:
+        print("[predict] Using per-position models (Track B)")
+        ep_next_map = {}
+        if bootstrap:
+            ep_next_map = {
+                el["id"]: el.get("ep_next", 0) or 0
+                for el in bootstrap.get("elements", [])
+            }
+        predictions = predict_next_gw_per_position(
+            latest,
+            models=pos_models,
+            ep_next_map=ep_next_map,
+        )
+    else:
+        if any_model_available:
+            print("[predict] No historical feature rows — falling back to global model or ep_next")
+        else:
+            print("[predict] No per-position models found — falling back to global model")
+
+        model_path = ACTIVE_MODEL
+        _fallback = False
+        if not model_path.exists() or latest.empty:
+            print(f"[predict] WARNING: Model not found or no data. Using xP from API.")
+            _fallback = True
+        else:
+            try:
+                predictions = predict_next_gw(latest, model_path)
+            except ValueError as e:
+                print(
+                    f"[predict] WARNING: Stale model at {model_path} is incompatible "
+                    f"({e}). Run `retrain` to rebuild. Falling back to API xP."
                 )
-        predictions = latest[["element", "name", "position", "team"]].copy()
-        predictions["xP"] = (latest["xP"] if "xP" in latest.columns else 0)
-        predictions["xP"] = predictions["xP"].fillna(0).clip(lower=0)
-        predictions["now_cost"] = latest["now_cost"].fillna(50)
+                _fallback = True
+
+        if _fallback:
+            if target_gw:
+                xp_path = VAASTAV_DIR / "data" / CURRENT_SEASON / "gws" / f"xP{target_gw}.csv"
+                if xp_path.exists():
+                    xp_df = pd.read_csv(xp_path)
+                    latest = latest.merge(
+                        xp_df.rename(columns={"id": "element"}),
+                        on="element", how="left", suffixes=("_feat", ""),
+                    )
+            predictions = latest[["element", "name", "position", "team"]].copy()
+            predictions["xP"] = (latest["xP"] if "xP" in latest.columns else 0)
+            predictions["xP"] = predictions["xP"].fillna(0).clip(lower=0)
+            predictions["now_cost"] = latest["now_cost"].fillna(50)
 
     # Apply xP corrections: blank GW zeroing (A-F4)
     if bootstrap and target_gw:
@@ -600,10 +627,11 @@ def phase_recommend(
 
 
 def phase_retrain(target_gw: int | None = None):
-    """Phase 4: Retrain RF model on full dataset (manual trigger)."""
+    """Phase 4: Retrain 4 per-position RF models on full dataset (manual trigger)."""
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.model_selection import train_test_split
-    from sklearn.metrics import mean_absolute_error, r2_score
+    from sklearn.metrics import mean_absolute_error
+    from scipy.stats import spearmanr
     import joblib
 
     print("[retrain] Building full feature-engineered dataset...")
@@ -611,41 +639,44 @@ def phase_retrain(target_gw: int | None = None):
     features = engineer_features(merged)
     print(f"[retrain] Training data: {len(features)} rows")
 
-    feature_cols = get_feature_columns()
-    X = features[feature_cols].fillna(0)
-    y = features["total_points"]
+    # Normalize position to string label
+    if "position" in features.columns and features["position"].dtype != object:
+        features["position"] = features["position"].map(ELEMENT_TYPE_MAP)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    feature_cols = [c for c in ALL_FEATURE_COLUMNS if c in features.columns]
 
-    print("[retrain] Training Random Forest model...")
-    model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-    model.fit(X_train, y_train)
-
-    # Evaluate
-    y_pred = model.predict(X_test)
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    print(f"[retrain] New model — MAE: {mae:.2f}, R2: {r2:.3f}")
-
-    # Compare with existing model if available
-    if ACTIVE_MODEL.exists():
-        old_model = joblib.load(ACTIVE_MODEL)
-        old_pred = old_model.predict(X_test)
-        old_mae = mean_absolute_error(y_test, old_pred)
-        old_r2 = r2_score(y_test, old_pred)
-        print(f"[retrain] Old model — MAE: {old_mae:.2f}, R2: {old_r2:.3f}")
-        if mae < old_mae:
-            print("[retrain] New model is BETTER (lower MAE)")
-        else:
-            print("[retrain] New model is WORSE (higher MAE) — consider keeping old model")
-
-    # Save with GW label (or timestamp fallback)
     label = f"gw{target_gw}" if target_gw else datetime.now().strftime("%Y%m%d_%H%M%S")
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    new_path = MODELS_DIR / f"rf_model_{label}.sav"
-    joblib.dump(model, new_path)
-    print(f"[retrain] Saved new model to {new_path}")
-    print(f"[retrain] To promote: update ACTIVE_MODEL in src/config.py to point to {new_path.name}")
+
+    position_results = {}
+    for pos in ["GK", "DEF", "MID", "FWD"]:
+        pos_df = features[features["position"] == pos].copy()
+        if len(pos_df) < 100:
+            print(f"[retrain] {pos}: insufficient data ({len(pos_df)} rows) — skipping")
+            continue
+
+        X = pos_df[feature_cols].fillna(0)
+        y = pos_df["total_points"]
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+        model.fit(X_train, y_train)
+
+        y_pred = model.predict(X_test)
+        mae = mean_absolute_error(y_test, y_pred)
+        rho, _ = spearmanr(y_pred, y_test)
+
+        new_path = MODELS_DIR / f"rf_{pos.lower()}_{label}.sav"
+        joblib.dump(model, new_path)
+        position_results[pos] = {"mae": mae, "rho": rho, "path": new_path, "n": len(pos_df)}
+        print(f"[retrain] {pos}: MAE={mae:.3f}, Spearman ρ={rho:.3f} ({len(pos_df)} rows) → {new_path.name}")
+
+    print("\n[retrain] Summary:")
+    for pos, r in position_results.items():
+        print(f"  {pos}: MAE={r['mae']:.3f}, ρ={r['rho']:.3f}")
+    print(f"\n[retrain] To promote: update ACTIVE_MODELS in src/config.py to point to these files.")
+    for pos, r in position_results.items():
+        print(f"  '{pos}': MODELS_DIR / '{r['path'].name}'")
 
 
 def main():

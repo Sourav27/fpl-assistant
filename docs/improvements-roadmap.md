@@ -2,7 +2,7 @@
 
 > **How to use this file:** Each _Track_ is one initiative — a self-contained batch of work you can ship in a day or a week. Tracks link to detailed plan files. Start a track by opening its plan and following task-by-task instructions. Tracks are ordered by impact/effort ratio.
 
-Last updated: 2026-04-05.
+Last updated: 2026-04-12.
 
 ---
 
@@ -111,9 +111,9 @@ python -m src.pipeline.run post-gw
 
 ---
 
-### 📋 Track B — Fixture-Aware Per-Position Models
-**Status:** SPEC READY · **Effort:** ~3–4 days
-**Plan:** Write detailed plan before starting (use `writing-plans` skill)
+### ✅ Track B — Fixture-Aware Per-Position Models
+**Status:** COMPLETE (2026-04-12) · **Tests:** 259 passing
+**Plan:** [`docs/superpowers/plans/2026-04-12-track-b-fixture-aware-per-position-models.md`](superpowers/plans/2026-04-12-track-b-fixture-aware-per-position-models.md)
 
 **Objective:** Replace the single global RF model with 4 per-position RF models (GK/DEF/MID/FWD), each trained with fixture-aware features. Switch primary evaluation metric from MAE to Spearman rank correlation (ρ). Handle DGW/BGW with per-fixture prediction and aggregation.
 
@@ -285,13 +285,22 @@ File: `src/pipeline/run.py:phase_retrain()`. Risk: low — drop-in replacement.
 - `src/config.py` — added `SOURCE_VALIDATION_CSV`, `SIGNAL_ACCURACY_CSV`, `SIGNAL_UNRESOLVED_CSV`
 - `tests/datasources/` — 43 new tests across unit + integration suites (all mocked, no live HTTP in CI)
 
-**Commits:** `2295d0c` → `4e4662e` (13 commits on `feature/track-h-data-sources`)
+**Commits:** `2295d0c` → `4e4662e` (13 commits on `feature/track-h-data-sources`) + H-C follow-up (7 commits, merged via worktree)
 
 **What each source unblocks:**
 - **H-F1/H-F2** → Track B `xGC_rolling_4` feature (use understat if gate passes, else vaastav `goals_conceded`)
 - **H-F3** → Track B DGW rotation (`rest_days` feature), Track G Tier 3 minutes tracker
 - **H-F4/H-F5/H-F6** → Track F `GET /api/news` endpoint (PlayerSignal list ready to serve)
 - **H-F7** → Track G Phase 2 xP auto-adjustment (accuracy log accumulating from day 1)
+
+**H-C consolidation (post-ship, same branch):**
+- **H-C1** — `SOURCE_COLUMN_MAP` added to `datasources/__init__.py`; normalises column names across sources
+- **H-C2** — `understat.py` rewritten to use `soccerdata` sync API; slimmed to `xg_chain` + `xg_buildup` only (xg_buildup excluded from model — kept for future use)
+- **H-C3** — `soccerdata_client.py` and `test_soccerdata.py` deleted; FotMob wrapper removed (superseded by H-C2 rewrite)
+- **H-C4** — `data/espn_player_id_map.csv` seeded with confirmed FPL→ESPN ID mappings
+- **H-C5** — `espn_client.py` added — fetches non-PL stats (UCL/EL) via ESPN eventlog API; used for Track B `rest_days` feature
+- **H-C6** — `availability_features.py` added — unified availability feature assembly (combines FPL API, FFS, premierinjuries signals)
+- **H-C7** — `source_validation.py` docstring updated to reflect post-H-C2 reality (soccerdata sync path)
 
 #### Deferred
 

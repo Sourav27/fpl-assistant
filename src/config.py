@@ -94,6 +94,14 @@ SEASONS = [
 # Model config — user promotes a new model by updating this path
 ACTIVE_MODEL = MODELS_DIR / "rf_model_gw31.sav"
 
+# Per-position model paths (Track B). Keys must match ELEMENT_TYPE_MAP values.
+ACTIVE_MODELS = {
+    "GK":  MODELS_DIR / "rf_gk_gw31.sav",
+    "DEF": MODELS_DIR / "rf_def_gw31.sav",
+    "MID": MODELS_DIR / "rf_mid_gw31.sav",
+    "FWD": MODELS_DIR / "rf_fwd_gw31.sav",
+}
+
 SQUAD_RULES = {
     "squad_size": 15,
     "xi_size": 11,

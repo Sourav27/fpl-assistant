@@ -1,11 +1,26 @@
 """Post-match analysis: prediction accuracy, benchmarks, and season logging."""
 from __future__ import annotations
 import logging
+import math
 from pathlib import Path
 
 import pandas as pd
+from scipy.stats import spearmanr as _spearmanr
 
 logger = logging.getLogger(__name__)
+
+
+def compute_spearman_rho(picks_df: pd.DataFrame) -> float:
+    """Compute Spearman rank correlation between xP predictions and actual points.
+
+    Returns NaN if fewer than 2 rows or no variance in either column.
+    picks_df must have columns: xP, actual_points.
+    """
+    df = picks_df.dropna(subset=["xP", "actual_points"])
+    if len(df) < 2:
+        return float("nan")
+    rho, _ = _spearmanr(df["xP"], df["actual_points"])
+    return float(rho) if not math.isnan(rho) else float("nan")
 
 
 def compute_prediction_misses(
@@ -96,20 +111,41 @@ def append_accuracy_log(
     your_xp: float | None,
     recommended_pts: int | None,
     recommended_xp: float | None,
-    dream_pts: int | None,
-    your_percentile_rank: int | None,
-    benchmarks: dict,
-    ranked_count: int | None,
+    dream_pts: int | None = None,
+    your_percentile_rank: int | None = None,
+    benchmarks: dict | None = None,
+    ranked_count: int | None = None,
+    # B-F7 new parameters
+    wildcard_pts: int | None = None,
+    wildcard_xp: float | None = None,
+    dream_team_pts: int | None = None,
+    picks_df: pd.DataFrame | None = None,
 ) -> None:
-    """Append one row per GW to the season accuracy log CSV."""
+    """Append one row per GW to the season accuracy log CSV.
+
+    dream_pts and dream_team_pts are aliases; dream_team_pts takes precedence.
+    picks_df: optional DataFrame with xP and actual_points columns for Spearman ρ.
+    """
     from datetime import datetime, timezone
+    if benchmarks is None:
+        benchmarks = {}
+    # Reconcile dream_pts / dream_team_pts aliases
+    effective_dream_pts = dream_team_pts if dream_team_pts is not None else dream_pts
+
+    # Compute Spearman ρ if picks_df provided
+    spearman_rho = None
+    if picks_df is not None and not picks_df.empty:
+        spearman_rho = compute_spearman_rho(picks_df)
+
     row = {
         "gw": gw,
         "your_pts": your_pts,
         "your_predicted_xp": round(your_xp, 2) if your_xp is not None else None,
         "recommended_pts": recommended_pts,
         "recommended_xp": round(recommended_xp, 2) if recommended_xp is not None else None,
-        "dream_team_pts": dream_pts,
+        "wildcard_pts": wildcard_pts,
+        "wildcard_xp": round(wildcard_xp, 2) if wildcard_xp is not None else None,
+        "dream_team_pts": effective_dream_pts,
         "your_percentile_rank": your_percentile_rank,
         "best_score": benchmarks.get("best_score"),
         "top_1k_score": benchmarks.get("top_1k_score"),
@@ -119,6 +155,7 @@ def append_accuracy_log(
         "avg_score": benchmarks.get("avg_score"),
         "median_score": benchmarks.get("median_score"),
         "ranked_count": ranked_count,
+        "spearman_rho": spearman_rho,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     path = Path(path)

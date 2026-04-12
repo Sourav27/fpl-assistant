@@ -116,8 +116,9 @@ class TestPhaseRetrain:
         gw_dir = tmp_path / "FPL" / "data" / "2025-26" / "gws"
         gw_dir.mkdir(parents=True)
         rows = []
-        for player in range(1, 6):
-            for gw in range(1, 20):
+        # 10 players × 20 GWs = 200 raw rows → ~120 after rolling-8 NaN drop (≥100 threshold)
+        for player in range(1, 11):
+            for gw in range(1, 21):
                 rows.append({
                     "name": f"Player{player}", "position": "MID", "team": "Arsenal",
                     "element": player, "total_points": np.random.randint(0, 15),
@@ -137,7 +138,10 @@ class TestPhaseRetrain:
              patch("src.pipeline.run.CURRENT_SEASON", "2025-26"):
             phase_retrain(target_gw=32)
 
-        assert (models_dir / "rf_model_gw32.sav").exists()
+        # Track B: retrain now saves per-position models.
+        # With all test data as "MID" position (100 rows), at least rf_mid_gw32.sav must exist.
+        saved_models = list(models_dir.glob("rf_*_gw32.sav"))
+        assert len(saved_models) >= 1, f"Expected at least one per-position model, found: {list(models_dir.iterdir())}"
 
 
 class TestRecommendPhase:

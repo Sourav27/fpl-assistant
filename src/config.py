@@ -9,6 +9,11 @@ MODELS_DIR = Path("models")
 PLOTS_DIR = Path("plots")
 SNAPSHOTS_DIR = RESULTS_DIR / "snapshots"
 
+# Model registry paths (Track I)
+BENCHMARK_PATH      = MODELS_DIR / "benchmark.json"
+METRICS_LEDGER_PATH = MODELS_DIR / "metrics_history.jsonl"
+CHARTS_DIR          = MODELS_DIR / "charts"
+
 SOURCE_VALIDATION_CSV = RESULTS_DIR / "source_validation.csv"
 SIGNAL_ACCURACY_CSV   = RESULTS_DIR / "signal_accuracy.csv"
 SIGNAL_UNRESOLVED_CSV = RESULTS_DIR / "signal_unresolved.csv"

@@ -1,11 +1,9 @@
 name: Daily FPL Bootstrap Snapshot
 
 on:
-  schedule:
-    # 01:40 UTC = 07:10 IST. FPL prices reset 07:00 IST (GMT).
-    # This captures the first post-reset snapshot.
-    - cron: '40 1 * * *'
-  workflow_dispatch:  # Allow manual trigger
+  # Schedule disabled — triggered externally via cron-job.org at 07:06 IST (01:36 UTC)
+  # to avoid GitHub Actions queue delays (~2.7h late on the built-in scheduler).
+  workflow_dispatch:  # Allow manual trigger + cron-job.org webhook
 
 jobs:
   snapshot:

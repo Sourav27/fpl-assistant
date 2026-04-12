@@ -1,7 +1,15 @@
-"""xG source validation gate for Track H / Track B dependency.
+"""Spearman ρ source validation gate — pipeline-level quality gate (not a datasource module).
 
-Gate rule: understat_rho >= fpl_opta_rho - tolerance → use understat xGC.
-If gate fails → fall back to vaastav goals_conceded for xGC_rolling_4.
+This file lives at src/pipeline/source_validation.py (pipeline root), NOT inside
+datasources/. It is a cross-source validation gate, not a per-source client.
+
+Gate rule: understat_rho >= fpl_opta_rho - tolerance → use understat xg_chain/xg_buildup.
+If gate fails → fall back to FPL API xG columns for the xGC rolling features.
+
+After Track H source consolidation (H-C2), Understat emits only xg_chain and xg_buildup
+(unique creative-chain metrics with no FPL equivalent). The Spearman ρ gate now validates
+correlation of xg_chain/xg_buildup against actual goal-chain outcomes — NOT xG vs actual
+goals, since xG is now sourced exclusively from the FPL API (expected_goals column).
 
 Usage:
     python -m src.pipeline.source_validation

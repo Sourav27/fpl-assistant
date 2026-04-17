@@ -34,7 +34,7 @@ jobs:
             echo "No changes to commit."
           else
             git commit -m "chore: daily bootstrap snapshot $(date -u +%Y-%m-%d)"
-            git pull --rebase && git push
+            git pull --rebase --autostash && git push
           fi
 
       - name: Check GW finished
@@ -87,7 +87,7 @@ jobs:
             echo "No accuracy log changes to commit."
           else
             git commit -m "chore: update accuracy_log.csv with gameweek ${{ steps.gw_check.outputs.current_gw }} performance data"
-            git pull --rebase && git push
+            git pull --rebase --autostash && git push
           fi
 
       - name: Notify Discord — post-gw accuracy
@@ -233,7 +233,7 @@ jobs:
             echo "No predict/recommend output to commit."
           else
             git commit -m "chore: auto predict+recommend GW${{ steps.deadline_check.outputs.next_gw }} ($(date -u +%Y-%m-%d))"
-            git pull --rebase && git push
+            git pull --rebase --autostash && git push
           fi
 
       - name: Notify Discord — predict/recommend results

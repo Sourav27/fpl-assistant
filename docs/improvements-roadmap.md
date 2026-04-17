@@ -78,7 +78,7 @@ Our current RF global model (MAE 1.035 across all players) is a reasonable start
 ## Initiative Tracker
 
 ### ✅ Track A — User Team Sync, Recommend & Post-Match Analysis
-**Status:** COMPLETE (2026-04-04) · **Tests:** 135 passing
+**Status:** COMPLETE (2026-04-04) · **Tests:** 135 passing · **Post-GW automation added 2026-04-17** (308 passing)
 **Plan:** [`docs/superpowers/plans/2026-03-29-track-a-team-sync-and-analysis.md`](superpowers/plans/2026-03-29-track-a-team-sync-and-analysis.md)
 
 **What was built:**
@@ -95,6 +95,15 @@ Our current RF global model (MAE 1.035 across all players) is a reasonable start
 - **A-F3** — Multi-GW leakage fixed: `rec_df` filtered to `gw == current_gw` before `recommended_pts` computation
 - **A-F4** — xP correction layer in `predict.py`: blank GW zeroing → FDR weighting → availability scaling; `raw_xp` preserved for model evaluation
 - **A-F5** — Replay test infrastructure: `tests/test_integration_replay.py` + `tests/fixtures/gw{N}/` cached API snapshots; GW30 and GW31 covered
+
+**Post-GW automation (2026-04-17) — merged to master:**
+- **A-F6** — `scripts/check_gw_finished.py` — reads bootstrap snapshot, emits `gw_finished`/`current_gw` GitHub Actions outputs
+- **A-F7** — `scripts/format_accuracy_discord.py` — formats accuracy log row as Discord markdown (your_pts, recommended, optimizer squad, dream team, Spearman ρ, benchmarks)
+- **A-F8** — `daily_bootstrap.yml` extended: after snapshot commit, detects GW-finished → runs `post-gw` → commits accuracy log → sends Discord summary to recommendations channel
+- **A-F9** — Fixed `wildcard_pts`/`wildcard_xp` always NULL: now computed from `squad_gw{N}.csv` actual scores (full 15-player optimizer squad vs live data)
+- **A-F10** — Fixed `spearman_rho` always NULL: `picks_df` now passed to `append_accuracy_log`
+- **A-F11** — Fixed `recommended_pts` fragile name-matching: now reads directly from `squad_recommend_gw{N}.csv`
+- **A-F12** — 6 new E2E tests in `TestPostGwDiscord` covering accuracy log fields, Discord script output, and GW-finished detection
 
 **Refactoring (same branch):**
 - `availability.py`: replaced `iterrows` with vectorized `np.select` + boolean masking (10× faster); logging at INFO level

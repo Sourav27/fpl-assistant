@@ -250,7 +250,7 @@ def phase_predict(target_gw: int | None = None):
         ep_next_map = {}
         if bootstrap:
             ep_next_map = {
-                el["id"]: el.get("ep_next", 0) or 0
+                el["id"]: float(el.get("ep_next") or 0)
                 for el in bootstrap.get("elements", [])
             }
         predictions = predict_next_gw_per_position(

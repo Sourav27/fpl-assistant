@@ -671,7 +671,8 @@ def phase_recommend(
     print(f"\nSaved to {out_path}")
 
     # Save post-transfer squad and XI for Discord notification
-    squad_after_ids = plan.get("squad_after", [])
+    # wildcard path returns "squad" not "squad_after" — normalise here
+    squad_after_ids = plan.get("squad_after") or plan.get("squad", [])
     if squad_after_ids:
         from src.pipeline.optimize import select_xi
         squad_rec = predictions[predictions["element"].isin(squad_after_ids)][

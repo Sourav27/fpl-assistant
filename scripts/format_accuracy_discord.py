@@ -24,6 +24,8 @@ def format_accuracy_row(row: pd.Series) -> str:
     def _fmt(val, suffix="", fmt=".1f"):
         if pd.isna(val):
             return "—"
+        if fmt == "d":
+            return f"{int(val)}{suffix}"
         return f"{val:{fmt}}{suffix}"
 
     lines.append(f"Your team:   **{_fmt(row.get('your_pts'), ' pts', 'd')}**  (predicted {_fmt(row.get('your_predicted_xp'))} xP)")

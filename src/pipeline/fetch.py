@@ -4,7 +4,7 @@ import logging
 import pandas as pd
 import requests
 from src.config import (
-    FPL_BOOTSTRAP_URL, FPL_PLAYER_URL, FPL_FIXTURES_URL,
+    FPL_BOOTSTRAP_URL, FPL_PLAYER_URL, FPL_FIXTURES_URL, FPL_EVENT_URL,
     CURRENT_SEASON, API_REQUEST_DELAY, API_RETRY_ATTEMPTS, API_RETRY_BASE_DELAY,
 )
 
@@ -191,35 +191,80 @@ def fetch_live_gw_data(
     bootstrap_data: dict,
     player_ids: list[int] | None = None,
 ) -> pd.DataFrame:
-    """Fetch all player data for a specific GW and normalize to vaastav schema.
+    """Fetch all player stats for target_gw via the bulk live endpoint.
 
-    Args:
-        target_gw: The GW number to collect data for.
-        bootstrap_data: Bootstrap-static response (for lookups).
-        player_ids: Optional subset of player IDs. Defaults to all active players.
+    Uses /api/event/{gw}/live/ — a single request that replaces the previous
+    per-player loop (~700 calls × 0.5 s delay each ≈ 6+ minutes).
+
+    Fields not available from the bulk endpoint (was_home, opponent_team,
+    kickoff_time) are set to defaults; value/transfers/selected are
+    supplemented from bootstrap_data.
     """
-    if player_ids is None:
-        player_ids = [e["id"] for e in bootstrap_data["elements"]]
+    url = f"{FPL_EVENT_URL}/{target_gw}/live/"
+    try:
+        data = _api_get_with_retry(url).json()
+    except requests.RequestException as e:
+        logger.error(f"Failed to fetch live GW{target_gw} data: {e}")
+        return pd.DataFrame()
 
-    lookups = _build_bootstrap_lookups(bootstrap_data)
+    team_map, element_map, pos_map = _build_bootstrap_lookups(bootstrap_data)
+
+    # Supplement stats not present in the live endpoint from bootstrap
+    bs_cost = {e["id"]: e.get("now_cost", 0) for e in bootstrap_data["elements"]}
+    bs_transfers_in = {e["id"]: e.get("transfers_in_event", 0) for e in bootstrap_data["elements"]}
+    bs_transfers_out = {e["id"]: e.get("transfers_out_event", 0) for e in bootstrap_data["elements"]}
+    bs_selected = {e["id"]: e.get("selected_by_percent", 0) for e in bootstrap_data["elements"]}
+
+    filter_set = set(player_ids) if player_ids else None
 
     rows = []
-    for i, pid in enumerate(player_ids):
-        if i > 0:
-            time.sleep(API_REQUEST_DELAY)
-        if (i + 1) % 50 == 0:
-            logger.info(f"Fetching player {i + 1}/{len(player_ids)}")
-
-        try:
-            data = fetch_player_history(pid)
-        except requests.RequestException as e:
-            logger.warning(f"Failed to fetch player {pid}: {e}")
+    for entry in data.get("elements", []):
+        pid = entry["id"]
+        if filter_set and pid not in filter_set:
             continue
 
-        for gw_row in data.get("history", []):
-            if gw_row["round"] == target_gw:
-                normalized = normalize_player_gw_to_vaastav(gw_row, bootstrap_data, _lookups=lookups)
-                rows.append(normalized)
-                break
+        stats = entry.get("stats", {})
+        element_info = element_map.get(pid, {})
+        explain = entry.get("explain", [])
+
+        row = {
+            "name": element_info.get("web_name", "Unknown"),
+            "position": pos_map.get(element_info.get("element_type"), "UNK"),
+            "team": team_map.get(element_info.get("team"), "Unknown"),
+            "element": pid,
+            "GW": target_gw,
+            "season": CURRENT_SEASON,
+            "xP": 0.0,
+            "total_points": stats.get("total_points", 0),
+            "minutes": stats.get("minutes", 0),
+            "goals_scored": stats.get("goals_scored", 0),
+            "assists": stats.get("assists", 0),
+            "clean_sheets": stats.get("clean_sheets", 0),
+            "goals_conceded": stats.get("goals_conceded", 0),
+            "bonus": stats.get("bonus", 0),
+            "bps": stats.get("bps", 0),
+            "influence": float(stats.get("influence", 0)),
+            "creativity": float(stats.get("creativity", 0)),
+            "threat": float(stats.get("threat", 0)),
+            "ict_index": float(stats.get("ict_index", 0)),
+            "value": bs_cost.get(pid, 0),
+            "transfers_in": bs_transfers_in.get(pid, 0),
+            "transfers_out": bs_transfers_out.get(pid, 0),
+            "selected": bs_selected.get(pid, 0),
+            # Not available in bulk live endpoint — set to safe defaults
+            "was_home": False,
+            "opponent_team": 0,
+            "fixture": explain[0].get("fixture", 0) if explain else 0,
+            "round": target_gw,
+            "kickoff_time": "",
+            "starts": stats.get("starts", 0),
+            "expected_goals": float(stats.get("expected_goals", 0)),
+            "expected_assists": float(stats.get("expected_assists", 0)),
+            "expected_goal_involvements": float(stats.get("expected_goal_involvements", 0)),
+            "expected_goals_conceded": float(stats.get("expected_goals_conceded", 0)),
+        }
+        for col in UNAVAILABLE_FROM_API:
+            row[col] = float("nan")
+        rows.append(row)
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()

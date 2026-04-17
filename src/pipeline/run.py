@@ -13,7 +13,7 @@ import json
 import logging
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -46,6 +46,19 @@ from src.pipeline.optimize import optimize_team
 
 logger = logging.getLogger(__name__)
 
+# Daily CI refresh runs at 07:06 IST (01:36 UTC). A bootstrap snapshot is
+# considered fresh if it was saved after the most recent 07:06 IST cutoff.
+_IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _latest_bootstrap_cutoff() -> datetime:
+    """Return the most recent 07:06 IST as a UTC-aware datetime."""
+    now_ist = datetime.now(_IST)
+    cutoff = now_ist.replace(hour=7, minute=6, second=0, microsecond=0)
+    if now_ist < cutoff:
+        cutoff -= timedelta(days=1)
+    return cutoff.astimezone(timezone.utc)
+
 
 def _score_from_entry_picks(entry_picks: dict) -> int:
     """Extract the user's actual GW score from FPL entry picks response.
@@ -67,25 +80,43 @@ def _filter_gw_transfers(rec_df: pd.DataFrame, current_gw: int) -> pd.DataFrame:
 
 
 def _load_cached_bootstrap(target_gw: int | None = None) -> dict | None:
-    """Try to load a recent cached bootstrap snapshot."""
+    """Load a cached bootstrap snapshot if it is fresh enough.
+
+    Freshness is determined by the daily CI cutoff: a snapshot must have been
+    saved after the most recent 07:06 IST (the scheduled daily refresh time).
+    This is stricter than a fixed 48-hour window — a snapshot from yesterday
+    afternoon is stale by morning even if < 24 h old.
+    """
     snapshot_dir = SNAPSHOTS_DIR
     if not snapshot_dir.exists():
         return None
 
+    cutoff = _latest_bootstrap_cutoff()
+
     if target_gw:
         path = snapshot_dir / f"bootstrap_gw{target_gw}.json"
         if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
+            mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+            if mtime >= cutoff:
+                return json.loads(path.read_text(encoding="utf-8"))
+            logger.warning(
+                f"bootstrap_gw{target_gw}.json is stale "
+                f"(saved {mtime:%Y-%m-%d %H:%M} UTC, cutoff {cutoff:%Y-%m-%d %H:%M} UTC)"
+            )
+            return None
 
-    # Find most recent snapshot
+    # No target_gw — use the most recent snapshot if fresh
     snapshots = sorted(snapshot_dir.glob("bootstrap_gw*.json"), reverse=True)
     if not snapshots:
         return None
 
     path = snapshots[0]
-    age_hours = (datetime.now(timezone.utc).timestamp() - path.stat().st_mtime) / 3600
-    if age_hours > BOOTSTRAP_MAX_AGE_HOURS:
-        logger.warning(f"Cached bootstrap is {age_hours:.0f}h old (>{BOOTSTRAP_MAX_AGE_HOURS}h), skipping")
+    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    if mtime < cutoff:
+        logger.warning(
+            f"Most recent bootstrap snapshot is stale "
+            f"(saved {mtime:%Y-%m-%d %H:%M} UTC, cutoff {cutoff:%Y-%m-%d %H:%M} UTC)"
+        )
         return None
 
     return json.loads(path.read_text(encoding="utf-8"))

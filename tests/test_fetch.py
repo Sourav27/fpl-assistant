@@ -125,35 +125,60 @@ class TestNormalizePlayerGwToVaastav:
 
 
 class TestFetchLiveGwData:
-    def test_returns_dataframe_for_one_gw(self, sample_bootstrap_json, sample_player_history_json):
+    # Bulk live endpoint format: {"elements": [{"id": N, "stats": {...}, "explain": [...]}]}
+    _live_response = {
+        "elements": [
+            {
+                "id": 3,
+                "stats": {
+                    "total_points": 8, "minutes": 90, "goals_scored": 1, "assists": 1,
+                    "clean_sheets": 0, "goals_conceded": 2, "bonus": 3, "bps": 35,
+                    "influence": "40.0", "creativity": "30.5", "threat": "45.0",
+                    "ict_index": "11.5", "starts": 1,
+                    "expected_goals": "0.25", "expected_assists": "0.15",
+                    "expected_goal_involvements": "0.40", "expected_goals_conceded": "0.80",
+                },
+                "explain": [{"fixture": 10}],
+            }
+        ]
+    }
+
+    def test_returns_dataframe_for_one_gw(self, sample_bootstrap_json):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = sample_player_history_json
+        mock_resp.json.return_value = self._live_response
 
         with patch("src.pipeline.fetch.requests.get", return_value=mock_resp):
-            with patch("src.pipeline.fetch.time.sleep"):  # skip rate limit delay
-                result = fetch_live_gw_data(
-                    target_gw=1,
-                    bootstrap_data=sample_bootstrap_json,
-                    player_ids=[3],  # just Saka
-                )
+            result = fetch_live_gw_data(
+                target_gw=1,
+                bootstrap_data=sample_bootstrap_json,
+                player_ids=[3],
+            )
 
         assert len(result) == 1
         assert result.iloc[0]["name"] == "Saka"
         assert result.iloc[0]["GW"] == 1
+        assert result.iloc[0]["total_points"] == 8
 
-    def test_skips_players_without_gw_data(self, sample_bootstrap_json):
-        """Player has no history for the target GW."""
+    def test_filters_by_player_ids(self, sample_bootstrap_json):
+        """player_ids filter excludes players not in the list."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"history": [], "history_past": [], "fixtures": []}
+        mock_resp.json.return_value = self._live_response
 
         with patch("src.pipeline.fetch.requests.get", return_value=mock_resp):
-            with patch("src.pipeline.fetch.time.sleep"):
-                result = fetch_live_gw_data(
-                    target_gw=30,
-                    bootstrap_data=sample_bootstrap_json,
-                    player_ids=[3],
-                )
+            result = fetch_live_gw_data(
+                target_gw=1,
+                bootstrap_data=sample_bootstrap_json,
+                player_ids=[999],  # Saka is id=3, not in list
+            )
 
         assert len(result) == 0
+
+    def test_returns_empty_on_api_error(self, sample_bootstrap_json):
+        """API failure returns empty DataFrame rather than raising."""
+        import requests as _req
+        with patch("src.pipeline.fetch.requests.get", side_effect=_req.RequestException("timeout")):
+            result = fetch_live_gw_data(target_gw=1, bootstrap_data=sample_bootstrap_json)
+
+        assert result.empty

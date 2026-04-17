@@ -447,22 +447,16 @@ def phase_post_gw():
         your_xp = float(your_picks["xP"].sum())
         misses = compute_prediction_misses(your_picks)
 
-    # Recommended team comparison
-    rec_path = RESULTS_DIR / f"recommend_{gw_label}.csv"
+    # Recommended team comparison — use saved squad CSV for accuracy
     recommended_pts = None
     recommended_xp = None
-    if rec_path.exists() and not live_df.empty:
-        rec_df = pd.read_csv(rec_path)
-        # A-F3: filter to current GW only — prevents future-horizon transfers from leaking
-        gw_transfers = _filter_gw_transfers(rec_df, current_gw=gw)
-        rec_elements = set(
-            predictions[predictions["name"].isin(gw_transfers["player_in"].dropna())]["element"]
-        )
-        if rec_elements:
-            rec_picks = live_df[live_df["element"].isin(rec_elements)]
-            recommended_pts = int(rec_picks["total_points"].sum())
-            rec_xp_df = predictions[predictions["element"].isin(rec_elements)]
-            recommended_xp = float(rec_xp_df["xP"].sum()) if not rec_xp_df.empty else None
+    squad_rec_path = RESULTS_DIR / f"squad_recommend_{gw_label}.csv"
+    if squad_rec_path.exists() and not live_df.empty:
+        rec_squad_df = pd.read_csv(squad_rec_path)
+        actual_map_rec = live_df.set_index("element")["total_points"].to_dict()
+        rec_squad_df["actual_points"] = rec_squad_df["element"].map(actual_map_rec).fillna(0)
+        recommended_pts = int(rec_squad_df["actual_points"].sum())
+        recommended_xp = float(rec_squad_df["xP"].sum()) if "xP" in rec_squad_df.columns else None
 
     # Dream team from live data
     dream_pts = None
@@ -511,14 +505,28 @@ def phase_post_gw():
         your_percentile_rank=your_percentile_rank, misses=misses,
     ))
 
+    # Wildcard baseline: full 15-player optimizer squad summed against live data.
+    # Intentionally the full squad (not just XI) so it reflects bench-boost potential.
+    wildcard_pts = None
+    wildcard_xp = None
+    squad_path = RESULTS_DIR / f"squad_{gw_label}.csv"
+    if squad_path.exists() and not live_df.empty:
+        squad_df = pd.read_csv(squad_path)
+        actual_map_wc = live_df.set_index("element")["total_points"].to_dict()
+        squad_df["actual_points"] = squad_df["element"].map(actual_map_wc).fillna(0)
+        wildcard_pts = int(squad_df["actual_points"].sum())
+        wildcard_xp = float(squad_df["xP"].sum()) if "xP" in squad_df.columns else None
+
     # Write accuracy log
     log_path = RESULTS_DIR / "accuracy_log.csv"
     append_accuracy_log(
         path=log_path, gw=gw,
         your_pts=your_pts, your_xp=your_xp,
         recommended_pts=recommended_pts, recommended_xp=recommended_xp,
+        wildcard_pts=wildcard_pts, wildcard_xp=wildcard_xp,
         dream_pts=dream_pts, your_percentile_rank=your_percentile_rank,
         benchmarks=benchmarks, ranked_count=benchmarks.get("ranked_count"),
+        picks_df=your_picks if not your_picks.empty else None,
     )
     print(f"[post-gw] Accuracy log updated: {log_path}")
 

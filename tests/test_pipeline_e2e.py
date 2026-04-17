@@ -359,3 +359,205 @@ class TestRecommendEmptyPredictions:
         empty = pd.DataFrame(columns=["element", "name", "position", "team", "xP", "now_cost"])
         with pytest.raises(ValueError, match="empty"):
             optimize_team(empty)
+
+
+# ---------------------------------------------------------------------------
+# E2E: post-gw accuracy log + Discord notification
+# ---------------------------------------------------------------------------
+
+class TestPostGwDiscord:
+    """Tests that phase_post_gw writes a correct accuracy log and fires Discord.
+
+    These tests use a finished GW31 bootstrap (finished=True on event id=31
+    — note: post-gw runs on the CURRENT finished GW, not next).
+    """
+
+    def _bootstrap_finished(self, e2e_bootstrap):
+        """Return a bootstrap where GW31 is current+finished, GW32 is next."""
+        import copy
+        bs = copy.deepcopy(e2e_bootstrap)
+        bs["events"] = [
+            {
+                "id": 31,
+                "deadline_time": "2026-03-20T18:30:00Z",
+                "is_current": True, "is_next": False, "finished": True,
+            },
+            {
+                "id": 32,
+                "deadline_time": "2026-03-27T18:30:00Z",
+                "is_current": False, "is_next": True, "finished": False,
+            },
+        ]
+        return bs
+
+    def _live_df(self, e2e_bootstrap):
+        """Fake live GW data — assign varying actual_points so spearman_rho is defined."""
+        players = e2e_bootstrap["elements"]
+        rows = [
+            {"element": p["id"], "total_points": (i % 5) + 2, "name": p["web_name"]}
+            for i, p in enumerate(players)
+        ]
+        return pd.DataFrame(rows)
+
+    def _setup_results(self, tmp_path, e2e_bootstrap):
+        """Write predictions, squad, and squad_recommend CSVs to results dir."""
+        results = tmp_path / "results"
+        results.mkdir(parents=True, exist_ok=True)
+
+        players = e2e_bootstrap["elements"]
+        from src.pipeline.fetch import ELEMENT_TYPE_MAP
+        rows = [{
+            "element": p["id"], "code": p["code"],
+            "name": p["web_name"], "xP": float(p["ep_next"]),
+            "now_cost": p["now_cost"],
+            "position": ELEMENT_TYPE_MAP.get(p["element_type"], "MID"),
+            "team": f"Team{p['team']}",
+        } for p in players]
+        df = pd.DataFrame(rows)
+
+        df.to_csv(results / "predictions_gw31.csv", index=False)
+        df.to_csv(results / "squad_gw31.csv", index=False)
+        df.head(15).to_csv(results / "squad_recommend_gw31.csv", index=False)
+        return results
+
+    def test_post_gw_accuracy_log_has_spearman_rho(self, tmp_path, e2e_bootstrap):
+        """phase_post_gw must write a non-null spearman_rho when picks data is available."""
+        import src.pipeline.run as run_mod
+        from unittest.mock import MagicMock
+
+        bs_finished = self._bootstrap_finished(e2e_bootstrap)
+        live_df = self._live_df(e2e_bootstrap)
+        results = self._setup_results(tmp_path, e2e_bootstrap)
+
+        entry_picks_response = MagicMock()
+        entry_picks_response.json.return_value = {
+            "entry_history": {"points": 55},
+            "picks": [{"element": p["id"]} for p in e2e_bootstrap["elements"][:11]],
+        }
+        entry_response = MagicMock()
+        entry_response.json.return_value = {"leagues": {"classic": []}}
+
+        with patch("src.pipeline.run.fetch_bootstrap", return_value=bs_finished), \
+             patch("src.pipeline.run.fetch_fixtures", return_value=[]), \
+             patch("src.pipeline.run.fetch_live_gw_data", return_value=live_df), \
+             patch("src.pipeline.run.RESULTS_DIR", results), \
+             patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
+             patch("src.pipeline.run.load_user_config", return_value={
+                 "teams": {"default": {"entry_id": 123}},
+                 "preferences": {},
+             }), \
+             patch("src.pipeline.run._api_get_with_retry", side_effect=[
+                 entry_picks_response, entry_response,
+                 MagicMock(**{"json.return_value": {"current": [{"event": 31, "percentile_rank": 25}]}}),
+             ]):
+            run_mod.phase_post_gw()
+
+        log = pd.read_csv(results / "accuracy_log.csv")
+        assert (log["spearman_rho"].notna()).any(), "spearman_rho must be written"
+
+    def test_post_gw_accuracy_log_has_wildcard_pts(self, tmp_path, e2e_bootstrap):
+        """phase_post_gw must write wildcard_pts when squad_gw{N}.csv exists."""
+        import src.pipeline.run as run_mod
+        from unittest.mock import MagicMock
+
+        bs_finished = self._bootstrap_finished(e2e_bootstrap)
+        live_df = self._live_df(e2e_bootstrap)
+        results = self._setup_results(tmp_path, e2e_bootstrap)
+
+        entry_picks_response = MagicMock()
+        entry_picks_response.json.return_value = {
+            "entry_history": {"points": 55},
+            "picks": [{"element": p["id"]} for p in e2e_bootstrap["elements"][:11]],
+        }
+
+        with patch("src.pipeline.run.fetch_bootstrap", return_value=bs_finished), \
+             patch("src.pipeline.run.fetch_fixtures", return_value=[]), \
+             patch("src.pipeline.run.fetch_live_gw_data", return_value=live_df), \
+             patch("src.pipeline.run.RESULTS_DIR", results), \
+             patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
+             patch("src.pipeline.run.load_user_config", return_value={
+                 "teams": {"default": {"entry_id": 123}},
+                 "preferences": {},
+             }), \
+             patch("src.pipeline.run._api_get_with_retry", side_effect=[
+                 entry_picks_response,
+                 MagicMock(**{"json.return_value": {"leagues": {"classic": []}}}),
+                 MagicMock(**{"json.return_value": {"current": []}}),
+             ]):
+            run_mod.phase_post_gw()
+
+        log = pd.read_csv(results / "accuracy_log.csv")
+        assert (log["wildcard_pts"].notna()).any(), "wildcard_pts must be written when squad CSV exists"
+        assert log.iloc[-1]["wildcard_pts"] > 0
+
+    def test_post_gw_discord_called(self, tmp_path, e2e_bootstrap):
+        """format_accuracy_discord.py must produce non-empty output for a complete log row."""
+        import subprocess, sys, json as _json
+        from pathlib import Path as _Path
+
+        results = tmp_path / "results"
+        results.mkdir(parents=True, exist_ok=True)
+        log_path = results / "accuracy_log.csv"
+        log_path.write_text(
+            "gw,your_pts,your_predicted_xp,recommended_pts,recommended_xp,"
+            "wildcard_pts,wildcard_xp,dream_team_pts,your_percentile_rank,"
+            "best_score,top_1k_score,top_10k_score,top_100k_score,top_1m_score,"
+            "avg_score,median_score,ranked_count,spearman_rho,timestamp\n"
+            "31,55,48.5,60,52.0,70,65.0,129,25,109,66,50,38,,38,,12914049,0.65,2026-04-17T00:00:00+00:00\n"
+        )
+
+        repo_root = _Path(__file__).parents[1]
+        result = subprocess.run(
+            [sys.executable, "scripts/format_accuracy_discord.py", str(log_path), "31"],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=repo_root,
+        )
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        assert "GW31" in result.stdout
+        assert "55" in result.stdout
+        assert "0.650" in result.stdout
+        assert "70" in result.stdout
+
+    def test_check_gw_finished_script(self, tmp_path, e2e_bootstrap):
+        """check_gw_finished.py must detect finished=True when current GW is done."""
+        import subprocess, sys, json as _json
+        from pathlib import Path as _Path
+
+        bs = dict(e2e_bootstrap)
+        bs["events"] = [
+            {"id": 31, "deadline_time": "2026-03-20T18:30:00Z",
+             "is_current": True, "is_next": False, "finished": True},
+        ]
+        snap = tmp_path / "bootstrap_gw31.json"
+        snap.write_text(_json.dumps(bs))
+
+        repo_root = _Path(__file__).parents[1]
+        result = subprocess.run(
+            [sys.executable, "scripts/check_gw_finished.py", str(snap)],
+            capture_output=True, text=True,
+            cwd=repo_root,
+        )
+        assert result.returncode == 0
+        assert "Finished: True" in result.stdout
+
+    def test_check_gw_not_finished(self, tmp_path, e2e_bootstrap):
+        """check_gw_finished.py must detect finished=False when GW is ongoing."""
+        import subprocess, sys, json as _json
+        from pathlib import Path as _Path
+
+        bs = dict(e2e_bootstrap)
+        bs["events"] = [
+            {"id": 31, "deadline_time": "2026-03-20T18:30:00Z",
+             "is_current": True, "is_next": False, "finished": False},
+        ]
+        snap = tmp_path / "bootstrap_gw31.json"
+        snap.write_text(_json.dumps(bs))
+
+        repo_root = _Path(__file__).parents[1]
+        result = subprocess.run(
+            [sys.executable, "scripts/check_gw_finished.py", str(snap)],
+            capture_output=True, text=True,
+            cwd=repo_root,
+        )
+        assert result.returncode == 0
+        assert "Finished: False" in result.stdout

@@ -250,7 +250,7 @@ def phase_predict(target_gw: int | None = None):
         ep_next_map = {}
         if bootstrap:
             ep_next_map = {
-                el["id"]: el.get("ep_next", 0) or 0
+                el["id"]: float(el.get("ep_next") or 0)
                 for el in bootstrap.get("elements", [])
             }
         predictions = predict_next_gw_per_position(
@@ -258,6 +258,28 @@ def phase_predict(target_gw: int | None = None):
             models=pos_models,
             ep_next_map=ep_next_map,
         )
+        # Guard: per-position models may only cover a subset of positions (e.g. only
+        # "MID" in the manifest) or may fail silently due to sklearn version mismatch.
+        # If any positions from latest are missing from predictions, fill them in from
+        # latest using ep_next xP so the optimizer always receives a full player pool.
+        if not latest.empty:
+            covered = set(predictions["element"].tolist()) if not predictions.empty else set()
+            missing_rows = latest[~latest["element"].isin(covered)].copy()
+            if not missing_rows.empty:
+                print(
+                    f"[predict] WARNING: {len(missing_rows)} players missing from per-position "
+                    f"predictions (positions not in manifest or prediction failed) — "
+                    f"filling from ep_next"
+                )
+                missing_rows["xP"] = missing_rows["xP"] if "xP" in missing_rows.columns else 0.0
+                missing_rows["_fallback"] = True
+                fill_cols = [c for c in predictions.columns if c in missing_rows.columns]
+                if predictions.empty:
+                    predictions = missing_rows[fill_cols].reset_index(drop=True)
+                else:
+                    predictions = pd.concat(
+                        [predictions, missing_rows[fill_cols]], ignore_index=True
+                    )
     else:
         if any_model_available:
             print("[predict] No historical feature rows — falling back to global model or ep_next")
@@ -537,6 +559,13 @@ def phase_recommend(
 
     predictions = pd.read_csv(pred_path)
     print(f"[recommend] Loaded {len(predictions)} player predictions from {pred_path}")
+
+    if predictions.empty:
+        print(
+            "[recommend] ERROR: predictions file is empty — optimizer cannot run. "
+            "Re-run 'predict' to regenerate predictions."
+        )
+        return None
 
     # Fetch user team state
     print(f"[recommend] Fetching team state for entry {entry_id}...")

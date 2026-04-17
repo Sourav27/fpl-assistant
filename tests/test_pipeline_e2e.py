@@ -243,3 +243,119 @@ class TestPipelineE2E:
         squad = pd.read_csv(results_dir / "squad_gw31.csv")
         total_cost = squad["now_cost"].sum()
         assert total_cost <= 1000, f"Budget exceeded: {total_cost / 10:.1f}M > 100M"
+
+
+# ---------------------------------------------------------------------------
+# E2E: partial manifest (only MID model available) — the CI failure pattern
+# ---------------------------------------------------------------------------
+
+class TestPartialManifestFallback:
+    """Tests the scenario that caused the GW33 CI failure:
+    active_models.json only lists a subset of positions (e.g. only MID was
+    promoted). predict_next_gw_per_position only iterates over listed positions,
+    leaving GK/DEF/FWD players unprocessed. The phase_predict fallback must
+    fill in the missing players from ep_next so the optimizer receives a full
+    15-player-eligible pool.
+    """
+
+    def _run_predict_with_mid_only_model(self, tmp_path, e2e_bootstrap):
+        """Run phase_predict with a fake MID-only model (other positions have no model)."""
+        import src.pipeline.run as run_mod
+        from unittest.mock import MagicMock
+
+        snapshot_dir = tmp_path / "snapshots"
+        gw_dir = tmp_path / "FPL" / "data" / "2025-26" / "gws"
+        results_dir = tmp_path / "results"
+
+        snapshot_dir.mkdir(parents=True)
+        gw_dir.mkdir(parents=True)
+        results_dir.mkdir(parents=True)
+
+        # Write bootstrap snapshot (normally written by phase_pre_deadline)
+        import json
+        (snapshot_dir / "bootstrap_gw31.json").write_text(json.dumps(e2e_bootstrap))
+
+        # Fake model that returns zeros for any input
+        fake_mid_model = MagicMock()
+        fake_mid_model.predict.return_value = [0.0]
+
+        # Manifest only has MID — simulates a partial promotion cycle
+        partial_models = {"MID": fake_mid_model}
+
+        with patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
+             patch("src.pipeline.run.RESULTS_DIR", results_dir), \
+             patch("src.pipeline.run.SNAPSHOTS_DIR", snapshot_dir), \
+             patch("src.pipeline.run.ACTIVE_MODEL", tmp_path / "nonexistent.sav"), \
+             patch("src.pipeline.run.ACTIVE_MODELS", {"MID": tmp_path / "fake_mid.sav"}), \
+             patch("src.pipeline.run.CURRENT_SEASON", "2025-26"), \
+             patch("src.pipeline.run.load_position_models", return_value=partial_models):
+            run_mod.phase_predict(target_gw=31)
+
+        return results_dir
+
+    def test_partial_manifest_still_produces_full_squad(self, tmp_path, e2e_bootstrap):
+        """When only MID model is in manifest, fallback must fill GK/DEF/FWD from ep_next."""
+        results_dir = self._run_predict_with_mid_only_model(tmp_path, e2e_bootstrap)
+
+        squad = pd.read_csv(results_dir / "squad_gw31.csv")
+        assert len(squad) == 15, (
+            f"Partial manifest fallback must produce 15-player squad, got {len(squad)}"
+        )
+
+    def test_partial_manifest_predictions_has_all_positions(self, tmp_path, e2e_bootstrap):
+        """predictions_gw31.csv must include GK/DEF/MID/FWD even if only MID model exists."""
+        results_dir = self._run_predict_with_mid_only_model(tmp_path, e2e_bootstrap)
+
+        preds = pd.read_csv(results_dir / "predictions_gw31.csv")
+        assert len(preds) > 0, "Predictions must not be empty when partial manifest is used"
+        positions_present = set(preds["position"].unique())
+        assert positions_present >= {"GK", "DEF", "MID", "FWD"}, (
+            f"All positions must be present in predictions, got: {positions_present}"
+        )
+
+    def test_partial_manifest_xi_valid(self, tmp_path, e2e_bootstrap):
+        """XI must be valid even when only one position model exists."""
+        results_dir = self._run_predict_with_mid_only_model(tmp_path, e2e_bootstrap)
+
+        xi = pd.read_csv(results_dir / "xi_gw31.csv")
+        assert len(xi) == 11, f"XI must have 11 players, got {len(xi)}"
+        assert (xi["position"] == "GK").sum() == 1
+
+
+# ---------------------------------------------------------------------------
+# E2E: recommend must exit gracefully on empty predictions
+# ---------------------------------------------------------------------------
+
+class TestRecommendEmptyPredictions:
+    """Tests that phase_recommend exits cleanly (no crash) when predictions
+    file exists but contains 0 rows — the downstream half of the GW33 failure.
+    """
+
+    def test_recommend_returns_none_on_empty_predictions(self, tmp_path, monkeypatch):
+        """phase_recommend must return None, not crash, when predictions CSV is empty."""
+        import src.pipeline.run as run_mod
+
+        results_dir = tmp_path / "results"
+        results_dir.mkdir()
+
+        # Write an empty predictions CSV (headers only)
+        (results_dir / "predictions_gw33.csv").write_text(
+            "element,code,name,position,team,xP,now_cost\n"
+        )
+
+        monkeypatch.setattr(run_mod, "RESULTS_DIR", results_dir)
+        monkeypatch.setattr(run_mod, "load_user_config", lambda: {
+            "teams": {"default": {"entry_id": 123}},
+            "preferences": {"horizon_gws": 1, "fdr_sensitivity": 0.15, "max_hit_points": 8},
+        })
+
+        result = run_mod.phase_recommend(target_gw=33, team_key="default")
+        assert result is None, "phase_recommend must return None on empty predictions, not crash"
+
+    def test_optimize_team_raises_on_empty(self):
+        """optimize_team must raise ValueError, not IndexError, when given empty players."""
+        from src.pipeline.optimize import optimize_team
+
+        empty = pd.DataFrame(columns=["element", "name", "position", "team", "xP", "now_cost"])
+        with pytest.raises(ValueError, match="empty"):
+            optimize_team(empty)

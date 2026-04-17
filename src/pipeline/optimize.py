@@ -80,8 +80,16 @@ def select_captain(xi: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
 
 def optimize_team(players: pd.DataFrame, budget: int | None = None) -> dict:
     """Full optimization pipeline: squad -> XI -> captain."""
+    if players.empty:
+        raise ValueError("No players to optimize — predictions DataFrame is empty")
     squad = select_squad(players, budget=budget)
+    if squad.empty:
+        raise ValueError(
+            f"Squad selection infeasible — {len(players)} players available but LP has no solution"
+        )
     xi = select_xi(squad)
+    if len(xi) < 2:
+        raise ValueError(f"XI selection infeasible — only {len(xi)} players selected")
     captain, vice = select_captain(xi)
 
     return {

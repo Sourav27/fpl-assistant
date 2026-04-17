@@ -1,11 +1,14 @@
 # src/pipeline/predict.py
 """Load trained models and generate predictions."""
 import joblib
+import logging
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from src.config import ACTIVE_MODEL, ACTIVE_MODELS, get_active_models
 from src.pipeline.features import FIXTURE_FEATURE_COLUMNS
+
+logger = logging.getLogger(__name__)
 
 
 FEATURE_COLUMNS = [
@@ -119,15 +122,26 @@ def predict_next_gw_per_position(
 
         if model is not None and len(available_features) >= len(FEATURE_COLUMNS):
             # Predict per row to support DGW (where each fixture row gets its own prediction)
-            xp_list = []
-            for i in range(len(X)):
-                row_X = X.iloc[[i]]
-                row_xp = model.predict(row_X)
-                xp_list.append(float(row_xp[0]))
-            xp = np.clip(xp_list, 0, None)
-            pos_df = pos_df.copy()
-            pos_df["xP"] = xp
-            pos_df["_fallback"] = False
+            try:
+                xp_list = []
+                for i in range(len(X)):
+                    row_X = X.iloc[[i]]
+                    row_xp = model.predict(row_X)
+                    xp_list.append(float(row_xp[0]))
+                xp = np.clip(xp_list, 0, None)
+                pos_df = pos_df.copy()
+                pos_df["xP"] = xp
+                pos_df["_fallback"] = False
+            except Exception as exc:
+                # Handles sklearn version mismatches (e.g. model trained on 1.7, running 1.8)
+                logger.warning(
+                    f"[predict] {pos} model.predict() failed ({exc}) — falling back to ep_next"
+                )
+                if ep_next_map:
+                    pos_df["xP"] = pos_df["element"].map(ep_next_map).fillna(0.0)
+                else:
+                    pos_df["xP"] = 0.0
+                pos_df["_fallback"] = True
         else:
             # Fallback: use ep_next if provided, else 0
             if ep_next_map:

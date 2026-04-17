@@ -37,6 +37,92 @@ jobs:
             git push
           fi
 
+      - name: Check GW finished
+        id: gw_check
+        run: |
+          SNAPSHOT=$(ls results/snapshots/bootstrap_gw*.json 2>/dev/null | sort -V | tail -1)
+          if [ -z "$SNAPSHOT" ]; then
+            echo "No snapshot found — skipping post-gw check."
+            echo "gw_finished=false" >> $GITHUB_OUTPUT
+          else
+            python scripts/check_gw_finished.py "$SNAPSHOT"
+          fi
+
+      - name: Install full pipeline deps for post-gw
+        if: steps.gw_check.outputs.gw_finished == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Write user_config.yaml for post-gw
+        id: postgw_config
+        if: steps.gw_check.outputs.gw_finished == 'true'
+        env:
+          USER_CONFIG_YAML: ${{ secrets.USER_CONFIG_YAML }}
+        run: |
+          if [ -z "$USER_CONFIG_YAML" ]; then
+            echo "USER_CONFIG_YAML not set — skipping post-gw."
+            echo "config_available=false" >> $GITHUB_OUTPUT
+          else
+            printf '%s' "$USER_CONFIG_YAML" > user_config.yaml
+            echo "config_available=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run post-gw analysis
+        if: |
+          steps.gw_check.outputs.gw_finished == 'true' &&
+          steps.postgw_config.outputs.config_available == 'true'
+        run: |
+          GW=${{ steps.gw_check.outputs.current_gw }}
+          echo "Running post-gw analysis for GW${GW}..."
+          python -m src.pipeline.run post-gw
+
+      - name: Commit accuracy log update
+        if: |
+          steps.gw_check.outputs.gw_finished == 'true' &&
+          steps.postgw_config.outputs.config_available == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/accuracy_log.csv || true
+          if git diff --cached --quiet; then
+            echo "No accuracy log changes to commit."
+          else
+            git commit -m "chore: update accuracy_log.csv with gameweek ${{ steps.gw_check.outputs.current_gw }} performance data"
+            git push
+          fi
+
+      - name: Notify Discord — post-gw accuracy
+        if: |
+          steps.gw_check.outputs.gw_finished == 'true' &&
+          steps.postgw_config.outputs.config_available == 'true'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_PREDICT_RECOMMEND_WEBHOOK_URL }}
+        run: |
+          python - <<'EOF'
+          import os, requests, datetime, subprocess, sys
+
+          webhook = os.environ.get("DISCORD_WEBHOOK", "").strip()
+          if not webhook:
+              print("DISCORD_PREDICT_RECOMMEND_WEBHOOK_URL not set — skipping post-gw notification.")
+              sys.exit(0)
+
+          gw = "${{ steps.gw_check.outputs.current_gw }}"
+          result = subprocess.run(
+              [sys.executable, "scripts/format_accuracy_discord.py", "results/accuracy_log.csv", gw],
+              capture_output=True, text=True,
+          )
+          body = result.stdout.strip() or f"Post-GW{gw} analysis complete — accuracy log updated."
+
+          IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+          date_str = datetime.datetime.now(IST).strftime("%Y-%m-%d %H:%M IST")
+          content = f"**FPL GW{gw} — {date_str}**\n\n{body}"
+          if len(content) > 2000:
+              content = content[:1990] + "\n… (truncated)"
+
+          r = requests.post(webhook, json={"content": content}, timeout=10)
+          r.raise_for_status()
+          print(f"Discord accuracy notification sent (HTTP {r.status_code})")
+          EOF
+
       - name: Check deadline proximity
         id: deadline_check
         run: |

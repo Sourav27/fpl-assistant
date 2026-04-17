@@ -671,8 +671,12 @@ def phase_recommend(
     print(f"\nSaved to {out_path}")
 
     # Save post-transfer squad and XI for Discord notification
-    # wildcard path returns "squad" not "squad_after" — normalise here
-    squad_after_ids = plan.get("squad_after") or plan.get("squad", [])
+    # For wildcard/freehit: show the user's actual current squad (already shown as Wildcard XI).
+    # For normal transfers: show squad_after (current squad + recommended moves applied).
+    if _is_wildcard_mode(user_state, wildcard):
+        squad_after_ids = user_state.current_squad
+    else:
+        squad_after_ids = plan.get("squad_after", [])
     if squad_after_ids:
         from src.pipeline.optimize import select_xi
         squad_rec = predictions[predictions["element"].isin(squad_after_ids)][

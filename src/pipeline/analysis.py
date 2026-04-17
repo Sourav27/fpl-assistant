@@ -163,7 +163,20 @@ def append_accuracy_log(
     df_new = pd.DataFrame([row])
     if path.exists():
         df_existing = pd.read_csv(path)
-        df_all = pd.concat([df_existing, df_new], ignore_index=True)
+        gw_mask = df_existing["gw"] == gw
+        if gw_mask.any():
+            # Upsert: fill only null fields in the last existing row for this GW
+            idx = df_existing[gw_mask].index[-1]
+            for col, val in row.items():
+                if val is not None:
+                    existing_val = df_existing.at[idx, col]
+                    if pd.isna(existing_val):
+                        df_existing.at[idx, col] = val
+            df_existing.at[idx, "timestamp"] = row["timestamp"]
+            # Remove any duplicate GW rows (keep last)
+            df_all = df_existing.drop_duplicates(subset=["gw"], keep="last").reset_index(drop=True)
+        else:
+            df_all = pd.concat([df_existing, df_new], ignore_index=True)
     else:
         df_all = df_new
     df_all.to_csv(path, index=False)

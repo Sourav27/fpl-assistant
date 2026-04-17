@@ -449,16 +449,17 @@ def publish_release(
         logger.info(f"[promote] Tag {tag} already exists — deleting before re-create")
         subprocess.run(["gh", "release", "delete", tag, "--yes"], check=True)
 
-    manifest_path = None
+    tmp_dir = None
     try:
-        # Write manifest to a temp file (cleaned up in finally)
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix="_active_models.json", delete=False, encoding="utf-8"
-        ) as f:
+        # Write manifest to a temp directory using the canonical filename so that
+        # `gh release create` uploads it as "active_models.json" (not a random
+        # NamedTemporaryFile prefix like "tmpXXXXXX_active_models.json").
+        tmp_dir = tempfile.mkdtemp()
+        manifest_path = Path(tmp_dir) / "active_models.json"
+        with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
-            manifest_path = f.name
 
-        assets = [manifest_path] + model_files + chart_files
+        assets = [str(manifest_path)] + model_files + chart_files
         cmd = ["gh", "release", "create", tag, *assets,
                "--title", title, "--notes", notes]
 
@@ -471,8 +472,9 @@ def publish_release(
         logger.info(f"[promote] Release published: {url}")
         return url
     finally:
-        if manifest_path:
-            Path(manifest_path).unlink(missing_ok=True)
+        if tmp_dir:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def run_promotion_pipeline(

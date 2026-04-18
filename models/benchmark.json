@@ -1,6 +1,62 @@
 {
-  "GK":  {"model_file": "rf_gk_gw31.sav",  "algorithm": "rf", "date": "2026-04-12", "train_mae": null, "train_rho": null, "train_hauler_mae": null, "test_mae": 0.724, "test_rho": 0.742, "test_hauler_mae": null, "test_gw_count": null},
-  "DEF": {"model_file": "rf_def_gw31.sav",  "algorithm": "rf", "date": "2026-04-12", "train_mae": null, "train_rho": null, "train_hauler_mae": null, "test_mae": 1.189, "test_rho": 0.613, "test_hauler_mae": null, "test_gw_count": null},
-  "MID": {"model_file": "rf_mid_gw31.sav",  "algorithm": "rf", "date": "2026-04-12", "train_mae": null, "train_rho": null, "train_hauler_mae": null, "test_mae": 1.085, "test_rho": 0.717, "test_hauler_mae": null, "test_gw_count": null},
-  "FWD": {"model_file": "rf_fwd_gw31.sav",  "algorithm": "rf", "date": "2026-04-12", "train_mae": null, "train_rho": null, "train_hauler_mae": null, "test_mae": 1.266, "test_rho": 0.721, "test_hauler_mae": null, "test_gw_count": null}
+  "GK": {
+    "model_file": "rf_gk_20260418.sav",
+    "algorithm": "rf",
+    "date": "2026-04-18",
+    "promoted": true,
+    "test_rho": 0.8162241544134318,
+    "test_mae": 0.292167040866054,
+    "test_hauler_mae": 2.713650793650793,
+    "test_gw_count": 21,
+    "test_gw_elapsed": 21,
+    "train_rho": 0.8089953101287658,
+    "train_mae": 0.37715561443864093,
+    "train_hauler_mae": 2.8078882415254234,
+    "benchmark_test_rho_at_time": 0.742
+  },
+  "DEF": {
+    "model_file": "rf_def_20260418.sav",
+    "algorithm": "rf",
+    "date": "2026-04-18",
+    "promoted": true,
+    "test_rho": 0.8181203654601222,
+    "test_mae": 0.5959263263325048,
+    "test_hauler_mae": 4.119949314574314,
+    "test_gw_count": 21,
+    "test_gw_elapsed": 21,
+    "train_rho": 0.7911444686204199,
+    "train_mae": 0.593426669951872,
+    "train_hauler_mae": 4.220285190999477,
+    "benchmark_test_rho_at_time": 0.613
+  },
+  "MID": {
+    "model_file": "rf_mid_20260418.sav",
+    "algorithm": "rf",
+    "date": "2026-04-18",
+    "promoted": true,
+    "test_rho": 0.8522850289558054,
+    "test_mae": 0.4976584484592303,
+    "test_hauler_mae": 4.009420289855073,
+    "test_gw_count": 22,
+    "test_gw_elapsed": 22,
+    "train_rho": 0.8555310919291327,
+    "train_mae": 0.5471910017215793,
+    "train_hauler_mae": 3.995719546437583,
+    "benchmark_test_rho_at_time": 0.717
+  },
+  "FWD": {
+    "model_file": "rf_fwd_20260418.sav",
+    "algorithm": "rf",
+    "date": "2026-04-18",
+    "promoted": true,
+    "test_rho": 0.8754559844659122,
+    "test_mae": 0.5583962173579109,
+    "test_hauler_mae": 5.651875,
+    "test_gw_count": 25,
+    "test_gw_elapsed": 25,
+    "train_rho": 0.8439955054346233,
+    "train_mae": 0.6107162902480212,
+    "train_hauler_mae": 4.873359683794466,
+    "benchmark_test_rho_at_time": 0.721
+  }
 }

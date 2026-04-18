@@ -1,16 +1,16 @@
-element,name,position,team,now_cost,xP,_fallback,raw_xP
-87,Christie,MID,Bournemouth,49,11.0,True,11.0
-90,Scott,MID,Bournemouth,50,14.0,True,14.0
-100,Kroupi.Jr,FWD,Bournemouth,46,11.0,True,11.0
-139,Verbruggen,GK,Brighton,45,11.5,True,11.5
-173,Wieffer,MID,Brighton,49,18.5,True,18.5
-178,Welbeck,FWD,Brighton,63,13.5,True,13.5
-283,Mateta,FWD,Crystal Palace,75,12.0,True,12.0
-341,Darlow,GK,Leeds,39,10.5,True,10.5
-344,Bijol,DEF,Leeds,39,15.5,True,15.5
-698,Okafor,MID,Leeds,55,16.5,True,16.5
-260,Guéhi,DEF,Man City,51,30.5,True,30.5
-411,O'Reilly,DEF,Man City,51,28.5,True,28.5
-417,Cherki,MID,Man City,64,20.5,True,20.5
-508,N.Williams,DEF,Nott'm Forest,48,13.5,True,13.5
-606,Mavropanos,DEF,West Ham,44,12.0,True,12.0
+element,xP,_fallback,now_cost,team,position,name,code,raw_xP
+74,12.75,False,47.0,Bournemouth,DEF,Truffert,494521.0,12.75
+82,17.03,False,82.0,Man City,MID,Semenyo,437730.0,17.03
+97,8.96,False,67.0,Bournemouth,FWD,Evanilson,444102.0,8.96
+163,21.09,False,51.0,Brighton,MID,Hinshelwood,532529.0,21.09
+164,10.22,False,55.0,Brighton,MID,O'Riley,219249.0,10.22
+169,13.86,False,49.0,Brighton,MID,Gomez,514254.0,13.86
+215,9.04,False,53.0,Burnley,FWD,Flemming,431639.0,9.04
+220,9.31,False,48.0,Chelsea,GK,Sánchez,215059.0,9.31
+224,10.350000000000001,False,60.0,Chelsea,DEF,Cucurella,179268.0,10.350000000000001
+232,7.61,False,40.0,Chelsea,DEF,Tosin,109646.0,7.61
+416,9.7,False,62.0,Man City,MID,Bernardo,165809.0,9.7
+470,5.91,False,40.0,Burnley,GK,Dúbravka,67089.0,5.91
+691,9.55,False,56.0,Leeds,FWD,Calvert-Lewin,177815.0,9.55
+706,6.859999999999999,False,39.0,Leeds,DEF,Justin,220627.0,6.859999999999999
+713,11.55,False,45.0,Bournemouth,DEF,A.Jimenez,551483.0,11.55

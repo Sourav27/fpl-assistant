@@ -104,9 +104,12 @@ def predict_next_gw_per_position(
     if "now_cost" not in df.columns and "value" in df.columns:
         df["now_cost"] = df["value"]
 
-    # Normalize position to string label if stored as integer
+    # Normalize position to string label if stored as integer.
+    # Guard: pandas 3.0 uses StringDtype (not object) for strings, so check
+    # for integer dtype explicitly — not "not object" — to avoid remapping
+    # already-string positions through an integer-keyed dict (→ all NaN).
     from src.pipeline.fetch import ELEMENT_TYPE_MAP
-    if df["position"].dtype != object:
+    if pd.api.types.is_integer_dtype(df["position"]):
         df["position"] = df["position"].map(ELEMENT_TYPE_MAP)
 
     feature_cols = ALL_FEATURE_COLUMNS

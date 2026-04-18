@@ -1,16 +1,16 @@
 element,xP,_fallback,now_cost,team,position,name,code,raw_xP
-31,5.19,False,64.0,Arsenal,FWD,G.Jesus,205651,5.19
-74,6.42,False,47.0,Bournemouth,DEF,Truffert,494521,6.42
-82,10.78,False,82.0,Man City,MID,Semenyo,437730,10.78
-97,4.81,False,67.0,Bournemouth,FWD,Evanilson,444102,4.81
-135,6.06,False,73.0,Newcastle,FWD,Wissa,216646,6.06
-163,11.05,False,51.0,Brighton,MID,Hinshelwood,532529,11.05
-169,7.12,False,49.0,Brighton,MID,Gomez,514254,7.12
-220,4.96,False,48.0,Chelsea,GK,Sánchez,215059,4.96
-292,6.52,False,49.0,Everton,DEF,Mykolenko,224967,6.52
-381,7.96,False,140.0,Liverpool,MID,M.Salah,118748,7.96
-452,9.03,False,62.0,Man Utd,MID,Amad,493250,9.03
-469,4.76,False,50.0,Newcastle,GK,Pope,98747,4.76
-532,5.78,False,45.0,Sunderland,DEF,Hume,487676,5.78
-713,6.36,False,45.0,Bournemouth,DEF,A.Jimenez,551483,6.36
-725,6.33,False,51.0,Arsenal,DEF,Hincapie,448104,6.33
+31,5.19,False,64.0,Arsenal,FWD,G.Jesus,205651.0,5.19
+32,4.58,False,51.0,Aston Villa,GK,Martinez,98980.0,4.58
+74,6.0,False,47.0,Bournemouth,DEF,Truffert,494521.0,6.0
+82,9.08,False,82.0,Man City,MID,Semenyo,437730.0,9.08
+135,6.06,False,73.0,Newcastle,FWD,Wissa,216646.0,6.06
+163,11.05,False,51.0,Brighton,MID,Hinshelwood,532529.0,11.05
+220,4.82,False,48.0,Chelsea,GK,Sánchez,215059.0,4.82
+292,6.52,False,49.0,Everton,DEF,Mykolenko,224967.0,6.52
+301,7.27,False,52.0,Everton,MID,Alcaraz,502697.0,7.27
+370,5.49,False,57.0,Liverpool,DEF,Frimpong,216094.0,5.49
+381,8.19,False,140.0,Liverpool,MID,M.Salah,118748.0,8.19
+452,9.03,False,62.0,Man Utd,MID,Amad,493250.0,9.03
+531,6.54,False,47.0,Sunderland,DEF,Ballard,223827.0,6.54
+691,4.6,False,56.0,Leeds,FWD,Calvert-Lewin,177815.0,4.6
+725,5.52,False,51.0,Arsenal,DEF,Hincapie,448104.0,5.52

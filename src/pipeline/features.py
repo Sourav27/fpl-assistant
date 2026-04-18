@@ -111,6 +111,69 @@ def add_fixture_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def build_prediction_features(
+    latest: pd.DataFrame,
+    fixtures: list[dict],
+    target_gw: int,
+    teams: list[dict],
+) -> pd.DataFrame:
+    """Expand latest (one row/player) to one row per fixture in target_gw.
+
+    DGW players produce 2 rows; BGW players are excluded. Per-fixture context
+    columns (is_home, fixture_count, is_fixture_2, rest_days) are set from the
+    actual upcoming fixtures. All rolling/form features are copied unchanged to
+    each row so predict_next_gw_per_position can sum xP across fixtures.
+    """
+    if latest.empty:
+        return pd.DataFrame()
+
+    gw_fixtures = [f for f in fixtures if f.get("event") == target_gw]
+    if not gw_fixtures:
+        return pd.DataFrame()
+
+    # Build bidirectional team lookups
+    team_name_to_id = {t["name"]: t["id"] for t in teams}
+    team_id_to_name = {t["id"]: t["name"] for t in teams}
+
+    # Collect fixtures per team: {team_id: [(kickoff, is_home), ...]} sorted by kickoff
+    team_fixtures: dict[int, list[tuple]] = {}
+    for fix in gw_fixtures:
+        ko = fix.get("kickoff_time", "")
+        for side, home_flag in (("team_h", 1), ("team_a", 0)):
+            tid = fix[side]
+            team_fixtures.setdefault(tid, []).append((ko, home_flag))
+    for tid in team_fixtures:
+        team_fixtures[tid].sort(key=lambda x: x[0])  # sort by kickoff
+
+    rows = []
+    for _, player in latest.iterrows():
+        tid = team_name_to_id.get(player["team"])
+        if tid is None or tid not in team_fixtures:
+            continue  # BGW — player has no fixture this GW
+
+        fixs = team_fixtures[tid]
+        n = len(fixs)
+
+        # Compute rest_days between first and second fixture
+        rest = 0.0
+        if n >= 2:
+            t1 = pd.Timestamp(fixs[0][0], tz="UTC")
+            t2 = pd.Timestamp(fixs[1][0], tz="UTC")
+            rest = max(0.0, (t2 - t1).total_seconds() / 86400)
+
+        for rank, (ko, is_home) in enumerate(fixs):
+            row = player.copy()
+            row["fixture_count"] = n
+            row["is_home"] = is_home
+            row["is_fixture_2"] = int(rank == 1)
+            row["rest_days"] = rest if rank == 1 else 0.0
+            rows.append(row)
+
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).reset_index(drop=True)
+
+
 def engineer_features(
     df: pd.DataFrame,
     drop_na: bool = True,

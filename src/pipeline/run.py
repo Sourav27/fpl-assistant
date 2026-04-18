@@ -36,7 +36,7 @@ from src.pipeline.analysis import (
     compute_prediction_misses, compute_dream_team,
     format_post_match_summary, append_accuracy_log,
 )
-from src.pipeline.features import engineer_features
+from src.pipeline.features import engineer_features, build_prediction_features
 from src.pipeline.predict import (
     predict_next_gw, get_feature_columns, save_full_predictions, apply_xp_corrections,
     load_position_models, predict_next_gw_per_position, ALL_FEATURE_COLUMNS,
@@ -284,47 +284,18 @@ def phase_predict(target_gw: int | None = None):
                 el["id"]: float(el.get("ep_next") or 0)
                 for el in bootstrap.get("elements", [])
             }
-        # Expand DGW players to 2 rows so predict_next_gw_per_position can sum xP.
+        # Expand to one row per fixture (DGW players get 2 rows).
         player_features = latest.copy()
         if bootstrap and target_gw:
             try:
                 fixtures = fetch_fixtures()
-                gw_fixtures = [f for f in fixtures if f.get("event") == target_gw]
-                # Count and collect kickoff times per team
-                team_fixture_times: dict[int, list] = {}
-                for fix in gw_fixtures:
-                    for side in ("team_h", "team_a"):
-                        tid = fix[side]
-                        team_fixture_times.setdefault(tid, []).append(fix.get("kickoff_time"))
-                dgw_team_ids = {tid for tid, times in team_fixture_times.items() if len(times) >= 2}
-                if dgw_team_ids:
-                    team_name_to_id = {t["name"]: t["id"] for t in bootstrap.get("teams", [])}
-                    expanded_rows = []
-                    dgw_elements: set[int] = set()
-                    for _, row in latest.iterrows():
-                        tid = team_name_to_id.get(row["team"])
-                        if tid and tid in dgw_team_ids:
-                            times = sorted(t for t in team_fixture_times[tid] if t)
-                            rest = 0.0
-                            if len(times) >= 2:
-                                t1 = pd.Timestamp(times[0], tz="UTC")
-                                t2 = pd.Timestamp(times[1], tz="UTC")
-                                rest = max(0.0, (t2 - t1).total_seconds() / 86400)
-                            row1 = row.copy()
-                            row1["fixture_count"] = 2
-                            row1["is_fixture_2"] = 0
-                            row1["rest_days"] = 0.0
-                            row2 = row.copy()
-                            row2["fixture_count"] = 2
-                            row2["is_fixture_2"] = 1
-                            row2["rest_days"] = rest
-                            expanded_rows.extend([row1, row2])
-                            dgw_elements.add(int(row["element"]))
-                        else:
-                            expanded_rows.append(row)
-                    if dgw_elements:
-                        player_features = pd.DataFrame(expanded_rows).reset_index(drop=True)
-                        print(f"[predict] Expanded {len(dgw_elements)} DGW players to 2 rows each")
+                teams_list = bootstrap.get("teams", [])
+                expanded = build_prediction_features(latest, fixtures, target_gw, teams_list)
+                if not expanded.empty:
+                    dgw_count = (expanded.groupby("element").size() > 1).sum()
+                    if dgw_count:
+                        print(f"[predict] Expanded {dgw_count} DGW players to 2 rows each")
+                    player_features = expanded
             except Exception as exc:
                 logger.warning(f"[predict] DGW expansion failed ({exc}) — using single-row predictions")
 

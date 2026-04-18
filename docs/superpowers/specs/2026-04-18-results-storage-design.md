@@ -2,21 +2,31 @@
 
 **Date:** 2026-04-18
 **Status:** Approved
-**Scope:** Reorganise `results/` into a season/GW folder structure; add weekly rank-comparison plot and transfer decision log. Standalone, lightweight — no web server. Track F (full dashboard) is deferred to next season.
+**Scope:** Reorganise `results/` into a season/GW folder structure; add weekly rank-comparison plots and transfer decision log. Standalone, lightweight — no web server. Track F (full dashboard) is deferred to next season.
 
 ---
 
 ## Objectives
 
-1. Clean, navigable `results/` folder organised by season and gameweek
-2. Weekly PNG plot comparing GW rank across three teams (actual, optimal, recommended)
+1. Clean, navigable `results/` folder organised by season and gameweek; snapshots moved to `data/`
+2. Per-GW and cumulative season rank-comparison PNGs across three teams (actual, optimal, recommended)
 3. Transfer decision log: what was recommended vs what was done, with point impact
+4. Backfill `actual_squad.csv` and `actual_transfers.csv` for GW31–33 via FPL API
 
 ---
 
 ## Folder Structure
 
 ```
+data/
+  Fantasy-Premier-League/    ← vaastav dataset (unchanged)
+  snapshots/
+    2025-26/
+      gw31/
+        bootstrap.json       ← FPL API snapshot used for that GW's pipeline run
+      gw32/  …
+    price_changes_latest.txt ← always current; stays at data/snapshots/ root
+
 results/
   2025-26/
     gw31/
@@ -27,19 +37,18 @@ results/
       actual_squad.csv       ← post-gw only: real fielded squad + actual_pts (sacred — never overwritten by predict)
     gw32/  …
     gw33/  …
-  snapshots/
-    2025-26/
-      gw31/
-        bootstrap.json       ← FPL API snapshot used for that GW's pipeline run
-      gw32/  …
-    price_changes_latest.txt ← always current; path = SNAPSHOTS_DIR / "price_changes_latest.txt" (unchanged)
-  accuracy_log.csv           ← season-level, stays at RESULTS_DIR root (path unchanged)
-  actual_transfers.csv       ← season-level actual transfer history (new)
+    actual_transfers.csv     ← season-level actual transfer log (one row per transfer)
+  accuracy_log.csv           ← cross-season, stays at RESULTS_DIR root
   reports/
-    rank_comparison.png      ← regenerated each post-gw
+    rank_comparison_gw{N}.png     ← per-GW: 3-bar chart, regenerated each post-gw
+    rank_comparison_season.png    ← cumulative season: running total rank, regenerated each post-gw
 ```
 
 **Key invariant:** `actual_squad.csv` is written only by `post-gw`. The `predict` and `recommend` phases write only `predictions.csv`, `optimal_squad.csv`, `recommend.csv`, and `recommended_squad.csv`. Re-running predict for model testing never touches `actual_squad.csv`.
+
+**Why snapshots in `data/`:** Snapshots are input data (FPL API state at deadline time), not pipeline outputs. They can be purged when the vaastav dataset is updated to cover the season. Results are pipeline outputs and should not mix with inputs.
+
+**Why `actual_transfers.csv` inside season:** Transfer decisions are season-specific context; no cross-season transfer comparison is planned. `accuracy_log.csv` stays at root because model accuracy metrics are compared across seasons.
 
 ---
 
@@ -71,7 +80,7 @@ Assembly source: `optimize_team()` return dict — `result["xi"]`, `result["benc
 ### `actual_squad.csv`
 Written by `run.py::phase_post_gw` only. Never written by predict or recommend.
 
-Source: FPL picks API `/api/entry/{entry_id}/event/{gw}/picks/` returns `element, position, multiplier, is_captain, is_vice_captain`. Names, team, and `now_cost` joined from bootstrap `elements` list for that GW. `actual_pts` sourced from the per-player event stats already fetched in `phase_post_gw`.
+Source: FPL picks API `/api/entry/{entry_id}/event/{gw}/picks/` returns `element, position, multiplier, is_captain, is_vice_captain`. Names, team, and `now_cost` joined from bootstrap `elements` list for that GW (`data/snapshots/2025-26/gw{N}/bootstrap.json`). `actual_pts` sourced from per-player event stats fetched in `phase_post_gw`.
 
 Written **before** `actual_transfers.csv` in `phase_post_gw` so the `actual_pts_gained` join can read it.
 
@@ -88,14 +97,14 @@ Written **before** `actual_transfers.csv` in `phase_post_gw` so the `actual_pts_
 | is_vice_captain | bool | |
 | now_cost | float | Price in £M |
 
-### `actual_transfers.csv`
-Season-level. One row per transfer made. Written/appended by `run.py::phase_post_gw` (after `actual_squad.csv`).
+### `actual_transfers.csv` (season-level, inside `results/2025-26/`)
+One row per transfer made. Written/appended by `run.py::phase_post_gw` (after `actual_squad.csv`).
 
 **Fetch:** new `_fetch_actual_transfers(entry_id: int, gw: int, bootstrap: dict) -> list[dict]` in `run.py`, calling `/api/entry/{entry_id}/transfers/` via existing `fetch.py` retry wrapper. Response is the full season transfer list with fields `element_in, element_out, element_in_cost, element_out_cost, event, time`. Filter to `event == gw`. Sort by `time` (ISO timestamp string) ascending within the filtered set → `transfer_rank` (1-based). Name lookup via bootstrap `elements` list; fall back to `str(element_id)` if not found.
 
-**`actual_pts_gained`:** join on `element` field against `actual_squad.csv` written earlier in the same `phase_post_gw` call. `player_in actual_pts − player_out actual_pts`. Null if either element is absent from `actual_squad.csv`.
+**`actual_pts_gained`:** join on `element` against `actual_squad.csv` written earlier in the same `phase_post_gw` call. `player_in actual_pts − player_out actual_pts`. Null if either element absent.
 
-**`hit_taken`:** `element_in_cost != element_out_cost` (FPL API encodes hit transfers with different cost values) — alternatively derive from `event_transfers_cost > 0` in entry history.
+**`hit_taken`:** `element_in_cost != element_out_cost` (FPL API encodes hit transfers with differing costs).
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -106,53 +115,46 @@ Season-level. One row per transfer made. Written/appended by `run.py::phase_post
 | actual_pts_gained | float | player_in actual_pts − player_out actual_pts (null if unavailable) |
 | hit_taken | bool | True if this transfer cost -4 pts |
 
-**Decision impact in `generate_reports.py`:** join `actual_transfers.csv` with per-GW `recommend.csv` on `(gw, player_out, player_in)` (exact name match). Matched → recommended_gain = `xp_in − xp_out` from `recommend.csv`. Unmatched actual transfer → recommended_gain = 0. Bar chart per GW shows `sum(actual_pts_gained) − sum(recommended_gain)`.
+**Decision impact in reports:** `generate_reports.py` joins `actual_transfers.csv` with per-GW `recommend.csv` on `(gw, player_out, player_in)` (exact name match). Matched → recommended_gain = `xp_in − xp_out`. Unmatched → recommended_gain = 0. Per-GW bar: `sum(actual_pts_gained) − sum(recommended_gain)`.
 
 ### `recommend.csv` (unchanged schema)
-| Column | Type | Description |
-|--------|------|-------------|
-| gw | int | |
-| action | str | "transfer" |
-| player_out | str | |
-| player_in | str | |
-| price_out | float | |
-| price_in | float | |
-| xp_out | float | |
-| xp_in | float | |
-| hit_cost | int | 0 or 4 |
-| bank_after | float | |
+`gw, action, player_out, player_in, price_out, price_in, xp_out, xp_in, hit_cost, bank_after`
 
 ---
 
-## `reports/rank_comparison.png`
+## Reports
 
-Two-panel PNG. Regenerated each post-gw. Covers GW31 onwards.
+### `reports/rank_comparison_gw{N}.png` — per-GW
 
-**Top panel — Rank percentile lines:**
+Generated for each completed GW (GW31+). Saved as `rank_comparison_gw32.png` etc.
 
-X-axis: GW number. Y-axis: approximate rank percentile on log scale (lower = better; labeled "top X%").
+**Layout:** Two panels.
 
-Three lines from `accuracy_log.csv`:
-- **My team** → `your_pts`; use `your_percentile_rank` directly (already stored)
-- **Optimal squad** → `wildcard_pts` (the unconstrained optimizer squad's actual points — semantically identical to "optimal squad" here)
-- **Recommended squad** → `recommended_pts`
+**Top panel — GW rank comparison (3 bars):**
+X-axis: three teams ("My team", "Optimal squad", "Recommended squad").
+Y-axis: approximate rank percentile (log scale, lower = better, labeled "top X%").
+- **My team** → `your_pts` from `accuracy_log.csv`; use `your_percentile_rank` directly
+- **Optimal squad** → `wildcard_pts` from `accuracy_log.csv` (`wildcard_pts` = actual points scored by the unconstrained optimizer squad = "optimal squad")
+- **Recommended squad** → `recommended_pts` from `accuracy_log.csv`
 
-For Optimal and Recommended lines, rank percentile is derived by linear interpolation in **points-space** between these anchors (then plotted on log-scale Y):
+Rank percentile for Optimal and Recommended interpolated from `best_score` and `avg_score` only (two-point linear interpolation in points-space). `top_1k_score` / `top_10k_score` / `top_100k_score` are **not used** — see bug note below.
 
-| Score threshold | Rank percentile |
-|---|---|
-| ≥ `best_score` | 0.001% |
-| `top_1k_score` | 0.015% |
-| `top_10k_score` | 0.15% |
-| `top_100k_score` | 1.5% |
-| `avg_score` | 50% |
-| 0 pts | 100% |
+**Bottom panel — Decision impact (transfer delta for this GW):**
+Bar per transfer slot: `actual_pts_gained − recommended_gain`. Green/red. GWs31–33 backfilled.
 
-Interpolation: `numpy.interp(score, thresholds_asc, percentiles_asc)`. Scores above `best_score` clamped to 0.001%. Scores below 0 clamped to 100%.
+### `reports/rank_comparison_season.png` — cumulative season
 
-**Bottom panel — Decision impact bars:**
+Regenerated each post-gw. Single chart.
 
-Bar chart per GW: `sum(actual_pts_gained) − sum(recommended_gain)`. Green = beat or matched recommendation; red = underperformed. Zero baseline. GWs with no `actual_transfers.csv` data (GW30–33 backfill gap) shown as zero-height bars.
+**X-axis:** GW number (GW31+). **Y-axis:** approximate season rank percentile (log scale).
+
+Three lines: cumulative total points for each team (summing GW scores from GW31 to current GW), converted to rank percentile using the same two-anchor interpolation (`best_score`, `avg_score` averaged across included GWs, with `ranked_count` from latest GW).
+
+### Bug: `top_N_score` values are unreliable
+
+`fetch_gw_benchmarks` currently fetches standings page N/50 by **season rank** and reads that player's GW score — but season rank ≠ GW rank. A player ranked 100,000th by season total can outscore one ranked 10,000th in a single GW. This is why `top_100k_score` (68) > `top_10k_score` (43) in GW32.
+
+**Fix (deferred to a separate task):** Replace the standings-pagination approach with a proper GW-rank lookup. Options: (a) use FPL's `leagues-classic/{overall_league_id}/standings/` sorted by `event_total` for that GW (requires checking if `&ordering=-event_total` is supported), or (b) fetch a large sample and sort locally. Until fixed, `top_1k/10k/100k` columns in `accuracy_log.csv` should be treated as unreliable and are excluded from rank_comparison interpolation.
 
 ---
 
@@ -160,79 +162,80 @@ Bar chart per GW: `sum(actual_pts_gained) − sum(recommended_gain)`. Green = be
 
 ### `scripts/migrate_results.py` (one-off, deleted after use)
 
-Exact filename patterns for GW30–33:
-
 | Existing file | New path | Notes |
 |---|---|---|
 | `results/predictions_gw{N}.csv` | `results/2025-26/gw{N}/predictions.csv` | Direct move |
-| `results/squad_gw{N}.csv` + `results/xi_gw{N}.csv` | `results/2025-26/gw{N}/optimal_squad.csv` | Merge (see below) |
+| `results/squad_gw{N}.csv` + `results/xi_gw{N}.csv` | `results/2025-26/gw{N}/optimal_squad.csv` | Merge (below) |
 | `results/recommend_gw{N}.csv` | `results/2025-26/gw{N}/recommend.csv` | Direct move |
-| `results/squad_recommend_gw{N}.csv` + `results/xi_recommend_gw{N}.csv` | `results/2025-26/gw{N}/recommended_squad.csv` | Merge (see below) |
-| `results/snapshots/bootstrap_gw{N}.json` | `results/snapshots/2025-26/gw{N}/bootstrap.json` | Direct move |
+| `results/squad_recommend_gw{N}.csv` + `results/xi_recommend_gw{N}.csv` | `results/2025-26/gw{N}/recommended_squad.csv` | Merge (below) |
+| `results/snapshots/bootstrap_gw{N}.json` | `data/snapshots/2025-26/gw{N}/bootstrap.json` | Move to data/ |
 
 **Merge logic (squad + xi → combined CSV):**
-Existing squad files columns: `element, name, position, team, now_cost, xP, raw_xP`. XI files are a subset (starters only, same columns). For each player in squad: `is_starter = element in xi["element"].values`. Bench players: `bench_order` = rank among non-starters by xP descending (1–4). `is_captain` and `is_vice_captain` = null for GW30–33 (not retroactively available). Drop `raw_xP` (still present in `predictions.csv`). Keep `element`.
+Existing squad columns: `element, name, position, team, now_cost, xP, raw_xP`. XI = subset (starters). `is_starter = element in xi["element"].values`. Bench: `bench_order` = rank by xP desc (1–4). `is_captain`/`is_vice_captain` = null for GW30–33. Drop `raw_xP`. Keep `element`.
 
-**Also:**
-- Delete `results/signal_unresolved.csv`
-- Do NOT create `actual_squad.csv` or `actual_transfers.csv` for GW30–33
-- `accuracy_log.csv` stays at `results/accuracy_log.csv` — no action needed
+**Also:** Delete `results/signal_unresolved.csv`. `accuracy_log.csv` stays at `results/accuracy_log.csv` — no action.
+
+### `scripts/backfill_actuals.py` (one-off for GW31–33, deleted after use)
+New script. Uses FPL API to retroactively create `actual_squad.csv` and `actual_transfers.csv` for GW31–33.
+- For each GW in [31, 32, 33]: fetch `/api/entry/{entry_id}/event/{gw}/picks/` + transfers endpoint + bootstrap snapshot (already migrated to `data/snapshots/`)
+- Write `results/2025-26/gw{N}/actual_squad.csv` and append to `results/2025-26/actual_transfers.csv`
+- Requires `user_config.yaml` to be present for `entry_id`
 
 ### `config.py`
 - Add `CURRENT_SEASON = "2025-26"`
 - Add `def gw_dir(season: str, gw: int) -> Path: return RESULTS_DIR / season / f"gw{gw}"`
+- Change `SNAPSHOTS_DIR = RESULTS_DIR / "snapshots"` → `SNAPSHOTS_DIR = DATA_DIR / "snapshots"` (move from results to data)
 - Add `def snapshot_dir(season: str, gw: int) -> Path: return SNAPSHOTS_DIR / season / f"gw{gw}"`
-- `SNAPSHOTS_DIR` remains `RESULTS_DIR / "snapshots"` (root unchanged — preserves `price_changes_latest.txt` at `SNAPSHOTS_DIR / "price_changes_latest.txt"`)
-- Remove `SIGNAL_UNRESOLVED_CSV` constant
+- Confirm `DATA_DIR = BASE_DIR / "data"` exists (add if not)
+- Remove `SIGNAL_UNRESOLVED_CSV`
 
 ### `src/pipeline/datasources/signals.py`
-`log_unresolved_name` is called from `ffs.py`, `premierinjuries.py`, and `reddit.py` — all pass `name`, `source`, `raw_text`, `timestamp` kwargs only (no `csv_path`). Change: keep function signature intact (removing it would break `__init__.py` export and three callers), but replace body with `logging.warning(f"[{source}] Unresolved player: {name!r} — {raw_text[:80]!r}")`. Remove the `from src.config import SIGNAL_UNRESOLVED_CSV` import inside the function body.
-
-`__init__.py` export of `log_unresolved_name` stays (callers import from there).
+`log_unresolved_name` called from `ffs.py`, `premierinjuries.py`, `reddit.py` — all pass `name, source, raw_text, timestamp` (no `csv_path`). Keep function signature; replace body with `logging.warning(f"[{source}] Unresolved player: {name!r} — {raw_text[:80]!r}")`. Remove `from src.config import SIGNAL_UNRESOLVED_CSV` from function body. `__init__.py` export unchanged.
 
 ### `src/pipeline/run.py`
-- Add `_build_squad_csv(result: dict) -> pd.DataFrame` helper
-- Add `_fetch_actual_transfers(entry_id: int, gw: int, bootstrap: dict) -> list[dict]` helper
-- `phase_predict`: write `gw_dir(CURRENT_SEASON, gw) / "predictions.csv"` and `"optimal_squad.csv"` via `_build_squad_csv`; remove old `xi_{gw_label}.csv` + `squad_{gw_label}.csv` writes
-- `phase_recommend`: write `gw_dir() / "recommend.csv"` and `"recommended_squad.csv"` via `_build_squad_csv`; remove old `squad_recommend_*` + `xi_recommend_*` writes
-- Snapshot read/write: replace all `SNAPSHOTS_DIR / f"bootstrap_gw{N}.json"` with `snapshot_dir(CURRENT_SEASON, gw) / "bootstrap.json"`
-- Fallback glob (currently `snapshot_dir.glob("bootstrap_gw*.json")`): replace with `sorted((SNAPSHOTS_DIR / CURRENT_SEASON).glob("*/bootstrap.json"), key=lambda p: int(p.parent.name.lstrip("gw")), reverse=True)`
-- `phase_post_gw`: (1) write `actual_squad.csv` via `build_actual_squad_csv()` from `analysis.py`; (2) call `_fetch_actual_transfers()` and append to `results/actual_transfers.csv`; (3) call `subprocess.run(["python", "scripts/generate_reports.py", "--from-gw", "31"])`
+- Add `_build_squad_csv(result: dict) -> pd.DataFrame`
+- Add `_fetch_actual_transfers(entry_id: int, gw: int, bootstrap: dict) -> list[dict]`
+- `phase_predict`: write to `gw_dir(CURRENT_SEASON, gw)`; remove old xi/squad flat writes
+- `phase_recommend`: write to `gw_dir()`; remove old squad_recommend/xi_recommend writes
+- Snapshot read/write: replace `SNAPSHOTS_DIR / f"bootstrap_gw{N}.json"` → `snapshot_dir(CURRENT_SEASON, gw) / "bootstrap.json"`
+- Fallback glob: `sorted((SNAPSHOTS_DIR / CURRENT_SEASON).glob("*/bootstrap.json"), key=lambda p: int(p.parent.name.lstrip("gw")), reverse=True)`
+- `phase_post_gw`: write `actual_squad.csv` → append `actual_transfers.csv` → call `generate_reports.py`
+- `actual_transfers.csv` path: `gw_dir(CURRENT_SEASON, gw).parent / "actual_transfers.csv"` (season root, not per-GW)
 
 ### `src/pipeline/analysis.py`
-- New function `build_actual_squad_csv(entry_picks: list[dict], bootstrap: dict, actual_pts_by_element: dict[int, int]) -> pd.DataFrame` — assembles `actual_squad.csv` schema from picks API response + bootstrap join + actual pts dict. Called from `run.py::phase_post_gw`.
-- `append_accuracy_log` unchanged; writes to `RESULTS_DIR / "accuracy_log.csv"` (path stays at root)
+- New `build_actual_squad_csv(entry_picks, bootstrap, actual_pts_by_element) -> pd.DataFrame`
+- `append_accuracy_log` unchanged (writes to `RESULTS_DIR / "accuracy_log.csv"`)
 
 ### `scripts/generate_reports.py` (new)
 ```
 python scripts/generate_reports.py [--from-gw 31]
 ```
-- Reads `results/accuracy_log.csv`
-- Reads `results/actual_transfers.csv` (may not exist for all GWs — handle gracefully)
-- Reads `results/2025-26/gw{N}/recommend.csv` for each GW ≥ from_gw
-- Writes `results/reports/rank_comparison.png`
+- Reads `results/accuracy_log.csv` + `results/2025-26/actual_transfers.csv` + per-GW `recommend.csv`
+- Writes `results/reports/rank_comparison_gw{N}.png` for each completed GW ≥ from_gw
+- Writes `results/reports/rank_comparison_season.png`
 
 ### `.github/workflows/daily_bootstrap.yml`
-- Snapshot write step: use `snapshots/2025-26/gw{N}/bootstrap.json` path
-- Snapshot commit glob: `results/snapshots/2025-26/` instead of `results/snapshots/`
-- After post-gw step, gated on `gw_finished == 'true'`: add step `python scripts/generate_reports.py --from-gw 31`
-- Results commit glob: add `results/reports/rank_comparison.png`
-- `price_changes_latest.txt` at `results/snapshots/price_changes_latest.txt` — path unchanged
+- Snapshot write: `data/snapshots/2025-26/gw{N}/bootstrap.json`
+- Snapshot commit glob: `data/snapshots/2025-26/`
+- After post-gw (gated on `gw_finished == 'true'`): `python scripts/generate_reports.py --from-gw 31`
+- Results commit glob: add `results/reports/`
+- `price_changes_latest.txt` at `data/snapshots/price_changes_latest.txt` (path updated to follow SNAPSHOTS_DIR move)
 
 ---
 
 ## Migration Plan
 
-1. Run `scripts/migrate_results.py` once locally
-2. Verify `results/2025-26/gw{30..33}/` contents
-3. Commit reorganised `results/` to git
-4. Delete `scripts/migrate_results.py`, commit deletion
-5. Pipeline writes new paths from GW34+ automatically
+1. Run `scripts/migrate_results.py` — reorganises results/, moves snapshots to data/
+2. Run `scripts/backfill_actuals.py` — creates actual_squad.csv + actual_transfers.csv for GW31–33
+3. Verify `results/2025-26/gw{31..33}/` and `data/snapshots/2025-26/` contents
+4. Commit reorganised files to git
+5. Delete both scripts, commit deletion
+6. Pipeline writes new paths from GW34+ automatically
 
 ---
 
 ## Out of Scope
 
 - Interactive web dashboard (Track F, next season)
-- Historical `actual_squad.csv` backfill for GW30–33 (no retroactive actual_pts without re-fetching live match data)
-- `raw_xP` dropped from squad CSVs (still present in `predictions.csv` for model evaluation)
+- Fix for `top_N_score` unreliability in `fetch_gw_benchmarks` (deferred, tracked as separate bug)
+- `raw_xP` dropped from squad CSVs (still in `predictions.csv` for model evaluation)

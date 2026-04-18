@@ -1,1 +1,9 @@
-
+gw,action,player_out,player_in,price_out,price_in,xp_out,xp_in,hit_cost,bank_after
+33,transfer,Van Hecke,Guéhi,4.5,5.1,8.5,30.5,0,10.2
+33,transfer,Tavernier,Wieffer,5.4,4.9,4.0,18.5,0,10.2
+33,transfer,Semenyo,Cherki,8.2,6.3,4.5,20.5,0,10.2
+33,transfer,Haaland,Mateta,14.3,7.5,4.5,12.0,0,10.2
+34,transfer,Palmer,Okafor,10.5,5.5,6.5,16.5,0,15.2
+35,transfer,Struijk,Bijol,4.3,3.9,7.5,15.5,0,15.6
+36,transfer,Gabriel,N.Williams,6.8,4.7,4.5,13.5,0,18.1
+37,hold,,,,,,,0,18.1

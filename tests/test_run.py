@@ -157,8 +157,8 @@ class TestRecommendPhase:
         result = phase_recommend(target_gw=33, team_key="default")
         assert result is None
 
-    def test_recommend_phase_wildcard_auto_detected(self):
-        """Wildcard chip auto-detected from user state activates unconstrained mode."""
+    def test_recommend_phase_wildcard_not_auto_detected(self):
+        """active_chip is ignored — wildcard mode requires explicit --wildcard flag."""
         from src.pipeline.user import UserTeamState
         from src.pipeline.run import _is_wildcard_mode
         state = UserTeamState(
@@ -167,7 +167,8 @@ class TestRecommendPhase:
             selling_prices={i: 67 for i in range(1, 16)},
             bank=0, free_transfers=1, active_chip="wildcard", total_value=0,
         )
-        assert _is_wildcard_mode(state, wildcard_flag=False) is True
+        # active_chip='wildcard' no longer auto-activates wildcard mode
+        assert _is_wildcard_mode(state, wildcard_flag=False) is False
 
     def test_recommend_phase_wildcard_flag_overrides(self):
         from src.pipeline.user import UserTeamState

@@ -178,6 +178,10 @@ def _recommend_single_gw(
     hit_count = int(round(lp_value(hits) or 0))
     cap_idx = next((i for i in range(n) if lp_value(captain[i]) is not None and lp_value(captain[i]) > 0.5), None)
 
+    pos_order = {"GK": 0, "DEF": 1, "MID": 2, "FWD": 3}
+    outs = sorted(outs, key=lambda i: pos_order.get(players.iloc[i]["position"], 9))
+    ins = sorted(ins, key=lambda i: pos_order.get(players.iloc[i]["position"], 9))
+
     transfers = []
     for out_i, in_i in zip(outs, ins):
         p_out = players.iloc[out_i]
@@ -373,6 +377,11 @@ def _recommend_multi_gw(
         outs = [i for i in range(n) if lp_value(tout[i][g]) is not None and lp_value(tout[i][g]) > 0.5]
         hit_count = int(round(lp_value(hits[g]) or 0))
         bank_val = lp_value(bank[g]) or 0.0
+
+        # Sort outs and ins by position so same-position players pair up in display.
+        pos_order = {"GK": 0, "DEF": 1, "MID": 2, "FWD": 3}
+        outs = sorted(outs, key=lambda i: pos_order.get(players.iloc[i]["position"], 9))
+        ins = sorted(ins, key=lambda i: pos_order.get(players.iloc[i]["position"], 9))
 
         transfers_gw = []
         for out_i, in_i in zip(outs, ins):

@@ -563,10 +563,9 @@ def phase_post_gw():
 
 
 def _is_wildcard_mode(user_state, wildcard_flag: bool) -> bool:
-    """Return True if wildcard or free-hit chip is active, or flag explicitly set."""
-    if wildcard_flag:
-        return True
-    return user_state.active_chip in ("wildcard", "freehit")
+    """Return True only when --wildcard flag is explicitly passed. Active chip auto-detection
+    is deferred — recommend_transfers always runs the normal ILP unless explicitly overridden."""
+    return wildcard_flag
 
 
 def phase_recommend(
@@ -658,7 +657,7 @@ def phase_recommend(
             if t_list:
                 for t in t_list:
                     print(f"  GW{gw}: OUT {t['player_out']} (£{t['price_out']:.1f}m) "
-                          f"→ IN {t['player_in']} (£{t['price_in']:.1f}m)")
+                          f"-> IN {t['player_in']} (£{t['price_in']:.1f}m)")
             else:
                 print(f"  GW{gw}: Hold")
     print(f"\nProjected xP ({horizon} GWs): {plan.get('projected_xp', 0):.1f}")

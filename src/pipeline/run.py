@@ -716,7 +716,7 @@ def phase_retrain(target_gw: int | None = None):
     print(f"[retrain] Training data: {len(features)} rows")
 
     # Normalize position to string label
-    if "position" in features.columns and features["position"].dtype != object:
+    if "position" in features.columns and pd.api.types.is_integer_dtype(features["position"]):
         features["position"] = features["position"].map(ELEMENT_TYPE_MAP)
 
     feature_cols = [c for c in ALL_FEATURE_COLUMNS if c in features.columns]

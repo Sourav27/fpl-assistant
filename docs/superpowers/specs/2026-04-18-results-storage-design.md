@@ -40,7 +40,7 @@ results/
     actual_transfers.csv     ← season-level actual transfer log (one row per transfer)
   accuracy_log.csv           ← cross-season, stays at RESULTS_DIR root
   reports/
-    rank_comparison_gw{N}.png     ← per-GW: 3-bar chart, regenerated each post-gw
+    rank_comparison_gw.png        ← all GWs across all seasons: grouped bars, grows each post-gw
     rank_comparison_season.png    ← cumulative season: running total rank, regenerated each post-gw
 ```
 
@@ -117,6 +117,11 @@ One row per transfer made. Written/appended by `run.py::phase_post_gw` (after `a
 
 **Decision impact in reports:** `generate_reports.py` joins `actual_transfers.csv` with per-GW `recommend.csv` on `(gw, player_out, player_in)` (exact name match). Matched → recommended_gain = `xp_in − xp_out`. Unmatched → recommended_gain = 0. Per-GW bar: `sum(actual_pts_gained) − sum(recommended_gain)`.
 
+### `accuracy_log.csv` — schema change
+Add `season` column (string, e.g. `"2025-26"`). Populated by `append_accuracy_log` going forward using `CURRENT_SEASON`. Backfilled as `"2025-26"` for existing GW31–33 rows during migration.
+
+This column is the join key that lets `generate_reports.py` distinguish GW31 2025-26 from GW31 2026-27 on the X-axis.
+
 ### `recommend.csv` (unchanged schema)
 `gw, action, player_out, player_in, price_out, price_in, xp_out, xp_in, hit_cost, bank_after`
 
@@ -124,23 +129,28 @@ One row per transfer made. Written/appended by `run.py::phase_post_gw` (after `a
 
 ## Reports
 
-### `reports/rank_comparison_gw{N}.png` — per-GW
+### `reports/rank_comparison_gw.png` — all GWs across seasons (single growing file)
 
-Generated for each completed GW (GW31+). Saved as `rank_comparison_gw32.png` etc.
+Regenerated each post-gw. Covers GW31 2025-26 onwards; grows as new GWs and seasons are added.
 
 **Layout:** Two panels.
 
-**Top panel — GW rank comparison (3 bars):**
-X-axis: three teams ("My team", "Optimal squad", "Recommended squad").
-Y-axis: approximate rank percentile (log scale, lower = better, labeled "top X%").
-- **My team** → `your_pts` from `accuracy_log.csv`; use `your_percentile_rank` directly
-- **Optimal squad** → `wildcard_pts` from `accuracy_log.csv` (`wildcard_pts` = actual points scored by the unconstrained optimizer squad = "optimal squad")
-- **Recommended squad** → `recommended_pts` from `accuracy_log.csv`
+**Top panel — grouped bars per GW:**
+X-axis: GW labels (`GW31`, `GW32`, …) grouped by season. Season boundaries marked with a vertical divider line; season label shown as a group annotation below (e.g. `── 2025-26 ──`). Data read from `accuracy_log.csv` ordered by `(season, gw)`.
 
-Rank percentile for Optimal and Recommended interpolated from `best_score` and `avg_score` only (two-point linear interpolation in points-space). `top_1k_score` / `top_10k_score` / `top_100k_score` are **not used** — see bug note below.
+Y-axis: points scored (higher = better, natural bar direction).
 
-**Bottom panel — Decision impact (transfer delta for this GW):**
-Bar per transfer slot: `actual_pts_gained − recommended_gain`. Green/red. GWs31–33 backfilled.
+Three bars per GW:
+- **My team** → `your_pts`
+- **Optimal squad** → `wildcard_pts`
+- **Recommended squad** → `recommended_pts`
+
+Data label on each bar: `Xpts\n(topY%)`. Rank percentile derived from two-anchor interpolation: `best_score → 0.001%`, `avg_score → 50%` (linear in points-space). `your_percentile_rank` used directly for "My team" when available. Bars colour-coded: blue = My team, green = Optimal, orange = Recommended.
+
+`top_1k_score` / `top_10k_score` / `top_100k_score` are **not used** — see bug note below.
+
+**Bottom panel — Decision impact (transfer delta per GW):**
+Bar per GW: `sum(actual_pts_gained) − sum(recommended_gain)`. Green = beat recommendation; red = underperformed. GW31–33 backfilled via `backfill_actuals.py`.
 
 ### `reports/rank_comparison_season.png` — cumulative season
 
@@ -173,7 +183,7 @@ Three lines: cumulative total points for each team (summing GW scores from GW31 
 **Merge logic (squad + xi → combined CSV):**
 Existing squad columns: `element, name, position, team, now_cost, xP, raw_xP`. XI = subset (starters). `is_starter = element in xi["element"].values`. Bench: `bench_order` = rank by xP desc (1–4). `is_captain`/`is_vice_captain` = null for GW30–33. Drop `raw_xP`. Keep `element`.
 
-**Also:** Delete `results/signal_unresolved.csv`. `accuracy_log.csv` stays at `results/accuracy_log.csv` — no action.
+**Also:** Delete `results/signal_unresolved.csv`. Backfill `accuracy_log.csv`: add `season` column with value `"2025-26"` for all existing rows (GW31–33).
 
 ### `scripts/backfill_actuals.py` (one-off for GW31–33, deleted after use)
 New script. Uses FPL API to retroactively create `actual_squad.csv` and `actual_transfers.csv` for GW31–33.
@@ -204,14 +214,14 @@ New script. Uses FPL API to retroactively create `actual_squad.csv` and `actual_
 
 ### `src/pipeline/analysis.py`
 - New `build_actual_squad_csv(entry_picks, bootstrap, actual_pts_by_element) -> pd.DataFrame`
-- `append_accuracy_log` unchanged (writes to `RESULTS_DIR / "accuracy_log.csv"`)
+- `append_accuracy_log`: add `season` parameter (default `CURRENT_SEASON`); write as first column after `gw`
 
 ### `scripts/generate_reports.py` (new)
 ```
 python scripts/generate_reports.py [--from-gw 31]
 ```
 - Reads `results/accuracy_log.csv` + `results/2025-26/actual_transfers.csv` + per-GW `recommend.csv`
-- Writes `results/reports/rank_comparison_gw{N}.png` for each completed GW ≥ from_gw
+- Writes `results/reports/rank_comparison_gw.png` (all GWs across seasons, regenerated in full)
 - Writes `results/reports/rank_comparison_season.png`
 
 ### `.github/workflows/daily_bootstrap.yml`

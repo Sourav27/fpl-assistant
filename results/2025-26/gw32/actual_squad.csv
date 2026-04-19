@@ -1,0 +1,16 @@
+element,name,position,team,actual_pts,is_starter,bench_order,is_captain,is_vice_captain,now_cost
+139,Verbruggen,GKP,Brighton,9,True,,False,False,4.5
+411,O'Reilly,DEF,Man City,14,True,,False,False,5.1
+5,Gabriel,DEF,Arsenal,4,True,,False,False,7.1
+151,Van Hecke,DEF,Brighton,5,True,,False,False,4.6
+82,Semenyo,MID,Man City,2,True,,False,False,8.2
+84,Tavernier,MID,Bournemouth,2,True,,False,False,5.4
+449,B.Fernandes,MID,Man Utd,4,True,,True,False,10.3
+235,Palmer,MID,Chelsea,4,True,,False,False,10.5
+430,Haaland,FWD,Man City,2,True,,False,False,14.5
+178,Welbeck,FWD,Brighton,2,True,,False,True,6.3
+249,João Pedro,FWD,Chelsea,2,True,,False,False,7.7
+341,Darlow,GKP,Leeds,4,False,1.0,False,False,3.9
+90,Scott,MID,Bournemouth,12,False,2.0,False,False,5.0
+343,Struijk,DEF,Leeds,2,False,3.0,False,False,4.3
+77,Hill,DEF,Bournemouth,3,False,4.0,False,False,4.2

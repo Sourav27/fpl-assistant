@@ -92,6 +92,27 @@ def _score_from_entry_picks(entry_picks: dict) -> int:
     return entry_picks["entry_history"]["points"]
 
 
+def _fetch_actual_transfers(entry_id: int, gw: int, bootstrap: dict) -> list[dict]:
+    """Fetch and format actual transfers made by the user for a given GW."""
+    el_map = {e["id"]: e.get("web_name", str(e["id"]))
+              for e in bootstrap.get("elements", [])}
+    resp = _api_get_with_retry(f"{FPL_ENTRY_URL}/{entry_id}/transfers/")
+    all_transfers = resp.json()
+    gw_transfers = [t for t in all_transfers if t.get("event") == gw]
+    gw_transfers.sort(key=lambda t: t.get("time", ""))
+    rows = []
+    for rank, t in enumerate(gw_transfers, start=1):
+        rows.append({
+            "gw": gw,
+            "player_out": el_map.get(t["element_out"], str(t["element_out"])),
+            "player_in":  el_map.get(t["element_in"],  str(t["element_in"])),
+            "transfer_rank": rank,
+            "actual_pts_gained": None,
+            "hit_taken": t.get("element_in_cost") != t.get("element_out_cost"),
+        })
+    return rows
+
+
 def _filter_gw_transfers(rec_df: pd.DataFrame, current_gw: int) -> pd.DataFrame:
     """Filter recommendation df to current-GW transfers only.
 
@@ -529,6 +550,37 @@ def phase_post_gw():
         your_picks["actual_points"] = your_picks["element"].map(actual_map).fillna(0)
         your_xp = float(your_picks["xP"].sum())
         misses = compute_prediction_misses(your_picks)
+
+    # Write actual_squad.csv and actual_transfers.csv
+    if entry_picks_data and not live_df.empty:
+        actual_pts_map = live_df.set_index("element")["total_points"].to_dict()
+        from src.pipeline.analysis import build_actual_squad_csv
+        actual_squad_df = build_actual_squad_csv(entry_picks_data, bootstrap, actual_pts_map)
+        actual_squad_path = _post_gw_dir / "actual_squad.csv"
+        _post_gw_dir.mkdir(parents=True, exist_ok=True)
+        actual_squad_df.to_csv(actual_squad_path, index=False)
+        print(f"[post-gw] Saved actual_squad.csv ({len(actual_squad_df)} players)")
+
+        # Write actual_transfers.csv
+        try:
+            transfers = _fetch_actual_transfers(entry_id, gw, bootstrap)
+            if transfers:
+                pts_by_name = actual_squad_df.set_index("name")["actual_pts"].to_dict()
+                for t in transfers:
+                    if t["player_in"] in pts_by_name and t["player_out"] in pts_by_name:
+                        t["actual_pts_gained"] = (
+                            (pts_by_name.get(t["player_in"], 0) or 0)
+                            - (pts_by_name.get(t["player_out"], 0) or 0)
+                        )
+                transfers_path = _post_gw_dir.parent / "actual_transfers.csv"
+                transfers_df = pd.DataFrame(transfers)
+                if transfers_path.exists():
+                    transfers_df.to_csv(transfers_path, mode="a", header=False, index=False)
+                else:
+                    transfers_df.to_csv(transfers_path, index=False)
+                print(f"[post-gw] Appended {len(transfers)} transfer(s) to actual_transfers.csv")
+        except Exception as e:
+            logger.warning(f"Could not fetch actual transfers: {e}")
 
     # Recommended team comparison — use saved squad CSV for accuracy
     recommended_pts = None

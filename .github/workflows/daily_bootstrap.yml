@@ -29,7 +29,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add results/snapshots/bootstrap_gw*.json
+          git add data/snapshots/2025-26/
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
@@ -40,7 +40,7 @@ jobs:
       - name: Check GW finished
         id: gw_check
         run: |
-          SNAPSHOT=$(ls results/snapshots/bootstrap_gw*.json 2>/dev/null | sort -V | tail -1)
+          SNAPSHOT=$(find data/snapshots/2025-26 -name "bootstrap.json" 2>/dev/null | sort -V | tail -1)
           if [ -z "$SNAPSHOT" ]; then
             echo "No snapshot found — skipping post-gw check."
             echo "gw_finished=false" >> $GITHUB_OUTPUT
@@ -127,7 +127,7 @@ jobs:
         id: deadline_check
         run: |
           # Find the bootstrap file for the next GW
-          SNAPSHOT=$(ls results/snapshots/bootstrap_gw*.json 2>/dev/null | sort -V | tail -1)
+          SNAPSHOT=$(find data/snapshots/2025-26 -name "bootstrap.json" 2>/dev/null | sort -V | tail -1)
           if [ -z "$SNAPSHOT" ]; then
             echo "No snapshot found — skipping deadline check."
             echo "deadline_approaching=false" >> $GITHUB_OUTPUT
@@ -289,7 +289,7 @@ jobs:
               print("DISCORD_WEBHOOK_URL secret not set — skipping notification.")
               exit(0)
 
-          summary_path = "results/snapshots/price_changes_latest.txt"
+          summary_path = "data/snapshots/price_changes_latest.txt"
           if os.path.exists(summary_path):
               summary = open(summary_path, encoding="utf-8").read().strip()
           else:

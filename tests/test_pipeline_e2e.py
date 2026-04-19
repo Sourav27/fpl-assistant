@@ -133,7 +133,7 @@ class TestPipelineE2E:
         return result, tmp_path / "results"
 
     def test_pre_deadline_writes_bootstrap_snapshot(self, tmp_path, e2e_bootstrap):
-        """Phase 1 must write bootstrap_gw{N}.json to SNAPSHOTS_DIR."""
+        """Phase 1 must write bootstrap.json under snapshot_dir(season, gw)."""
         import src.pipeline.run as run_mod
 
         snapshot_dir = tmp_path / "snapshots"
@@ -141,14 +141,17 @@ class TestPipelineE2E:
              patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
              patch("src.pipeline.run.RESULTS_DIR", tmp_path / "results"), \
              patch("src.pipeline.run.SNAPSHOTS_DIR", snapshot_dir), \
-             patch("src.pipeline.run.CURRENT_SEASON", "2025-26"):
+             patch("src.pipeline.run.CURRENT_SEASON", "2025-26"), \
+             patch("src.pipeline.run.get_snapshot_dir",
+                   side_effect=lambda season, gw: snapshot_dir / season / f"gw{gw}"):
             (tmp_path / "FPL" / "data" / "2025-26" / "gws").mkdir(parents=True)
             (tmp_path / "results").mkdir()
             snapshot_dir.mkdir()
             run_mod.phase_pre_deadline()
 
-        assert (snapshot_dir / "bootstrap_gw31.json").exists()
-        data = json.loads((snapshot_dir / "bootstrap_gw31.json").read_text())
+        expected = snapshot_dir / "2025-26" / "gw31" / "bootstrap.json"
+        assert expected.exists()
+        data = json.loads(expected.read_text())
         assert "elements" in data
 
     def test_pre_deadline_writes_xp_snapshot(self, tmp_path, e2e_bootstrap):

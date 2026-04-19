@@ -22,6 +22,7 @@ from src.config import (
     VAASTAV_DIR, RESULTS_DIR, MODELS_DIR, CURRENT_SEASON,
     ACTIVE_MODEL, ACTIVE_MODELS, BOOTSTRAP_MAX_AGE_HOURS, SNAPSHOTS_DIR,
     FPL_ENTRY_URL, load_user_config, UserConfigError, gw_dir,
+    snapshot_dir as get_snapshot_dir,
 )
 from src.pipeline.fetch import (
     fetch_bootstrap, get_current_gw, get_next_deadline,
@@ -108,14 +109,13 @@ def _load_cached_bootstrap(target_gw: int | None = None) -> dict | None:
     This is stricter than a fixed 48-hour window — a snapshot from yesterday
     afternoon is stale by morning even if < 24 h old.
     """
-    snapshot_dir = SNAPSHOTS_DIR
-    if not snapshot_dir.exists():
+    if not SNAPSHOTS_DIR.exists():
         return None
 
     cutoff = _latest_bootstrap_cutoff()
 
     if target_gw:
-        path = snapshot_dir / f"bootstrap_gw{target_gw}.json"
+        path = get_snapshot_dir(CURRENT_SEASON, target_gw) / "bootstrap.json"
         if path.exists():
             mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
             if mtime >= cutoff:
@@ -127,7 +127,12 @@ def _load_cached_bootstrap(target_gw: int | None = None) -> dict | None:
             return None
 
     # No target_gw — use the most recent snapshot if fresh
-    snapshots = sorted(snapshot_dir.glob("bootstrap_gw*.json"), reverse=True)
+    season_dir = SNAPSHOTS_DIR / CURRENT_SEASON
+    snapshots = sorted(
+        season_dir.glob("*/bootstrap.json"),
+        key=lambda p: int(p.parent.name.lstrip("gw")),
+        reverse=True,
+    ) if season_dir.exists() else []
     if not snapshots:
         return None
 
@@ -168,8 +173,9 @@ def phase_pre_deadline():
     print(f"[pre-deadline] Saved xP snapshot for GW{next_gw} ({len(xp)} players)")
 
     # Save bootstrap for reference
-    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(SNAPSHOTS_DIR / f"bootstrap_gw{next_gw}.json", "w") as f:
+    snap_path = get_snapshot_dir(CURRENT_SEASON, next_gw) / "bootstrap.json"
+    snap_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(snap_path, "w") as f:
         json.dump(bootstrap, f)
     print("[pre-deadline] Saved bootstrap snapshot")
 
@@ -228,10 +234,11 @@ def phase_predict(target_gw: int | None = None):
                         print(f"[predict] Found Wayback snapshot {ts} — downloading...")
                         try:
                             bootstrap = fetch_wayback_bootstrap(ts)
-                            SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-                            with open(SNAPSHOTS_DIR / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
+                            snap_path = get_snapshot_dir(CURRENT_SEASON, target_gw) / "bootstrap.json"
+                            snap_path.parent.mkdir(parents=True, exist_ok=True)
+                            with open(snap_path, "w", encoding="utf-8") as f:
                                 json.dump(bootstrap, f)
-                            print(f"[predict] Cached Wayback bootstrap as bootstrap_gw{target_gw}.json")
+                            print(f"[predict] Cached Wayback bootstrap as {snap_path}")
                         except Exception as e:
                             logger.warning(f"Wayback bootstrap download failed: {e}")
                     else:
@@ -245,10 +252,11 @@ def phase_predict(target_gw: int | None = None):
             else:
                 bootstrap = live_bootstrap
                 if target_gw:
-                    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-                    with open(SNAPSHOTS_DIR / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
+                    snap_path = get_snapshot_dir(CURRENT_SEASON, target_gw) / "bootstrap.json"
+                    snap_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(snap_path, "w", encoding="utf-8") as f:
                         json.dump(bootstrap, f)
-                    print(f"[predict] Cached live bootstrap as bootstrap_gw{target_gw}.json")
+                    print(f"[predict] Cached live bootstrap as {snap_path}")
         except Exception as e:
             logger.warning(f"Could not fetch bootstrap from API: {e}. Proceeding without (stale data risk).")
 

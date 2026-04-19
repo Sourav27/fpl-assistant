@@ -23,17 +23,20 @@ class TestPhasePreDeadline:
         assert xp_path.exists()
 
     def test_saves_bootstrap_snapshot(self, tmp_path, sample_bootstrap_json):
+        snapshots_root = tmp_path / "results" / "snapshots"
         with patch("src.pipeline.run.fetch_bootstrap", return_value=sample_bootstrap_json), \
              patch("src.pipeline.run.VAASTAV_DIR", tmp_path / "FPL"), \
              patch("src.pipeline.run.RESULTS_DIR", tmp_path / "results"), \
-             patch("src.pipeline.run.SNAPSHOTS_DIR", tmp_path / "results" / "snapshots"):
+             patch("src.pipeline.run.SNAPSHOTS_DIR", snapshots_root), \
+             patch("src.pipeline.run.get_snapshot_dir",
+                   side_effect=lambda season, gw: snapshots_root / season / f"gw{gw}"):
             (tmp_path / "FPL" / "data" / "2025-26" / "gws").mkdir(parents=True)
             (tmp_path / "results").mkdir()
-            (tmp_path / "results" / "snapshots").mkdir(parents=True)
+            snapshots_root.mkdir(parents=True)
 
             phase_pre_deadline()
 
-        snapshot_path = tmp_path / "results" / "snapshots" / "bootstrap_gw31.json"
+        snapshot_path = snapshots_root / "2025-26" / "gw31" / "bootstrap.json"
         assert snapshot_path.exists()
         data = json.loads(snapshot_path.read_text())
         assert "elements" in data

@@ -1,16 +1,16 @@
 element,name,position,team,xP,is_starter,bench_order,is_captain,is_vice_captain,now_cost
-5,Gabriel,DEF,Arsenal,4.5,False,2.0,,,72
-77,Hill,DEF,Bournemouth,2.0,False,4.0,,,42
-90,Scott,MID,Bournemouth,14.0,True,,,,50
-139,Verbruggen,GK,Brighton,11.5,True,,,,45
-173,Wieffer,MID,Brighton,18.5,True,,,,49
-178,Welbeck,FWD,Brighton,13.5,True,,,,63
-235,Palmer,MID,Chelsea,6.5,True,,,,105
-249,João Pedro,FWD,Chelsea,4.5,False,3.0,,,77
-283,Mateta,FWD,Crystal Palace,12.0,True,,,,75
-341,Darlow,GK,Leeds,10.5,False,1.0,,,39
-343,Struijk,DEF,Leeds,7.5,True,,,,43
-260,Guéhi,DEF,Man City,30.5,True,,,,51
-411,O'Reilly,DEF,Man City,16.049999999999997,True,,,,50
-417,Cherki,MID,Man City,20.5,True,,,,63
-449,B.Fernandes,MID,Man Utd,8.5,True,,,,103
+5,Gabriel,DEF,Arsenal,4.5,False,2.0,False,False,72
+77,Hill,DEF,Bournemouth,2.0,False,4.0,False,False,42
+90,Scott,MID,Bournemouth,14.0,True,,False,False,50
+139,Verbruggen,GK,Brighton,11.5,True,,False,False,45
+173,Wieffer,MID,Brighton,18.5,True,,False,False,49
+178,Welbeck,FWD,Brighton,13.5,True,,False,False,63
+235,Palmer,MID,Chelsea,6.5,True,,False,False,105
+249,João Pedro,FWD,Chelsea,4.5,False,3.0,False,False,77
+283,Mateta,FWD,Crystal Palace,12.0,True,,False,False,75
+341,Darlow,GK,Leeds,10.5,False,1.0,False,False,39
+343,Struijk,DEF,Leeds,7.5,True,,False,False,43
+260,Guéhi,DEF,Man City,30.5,True,,True,False,51
+411,O'Reilly,DEF,Man City,16.049999999999997,True,,False,False,50
+417,Cherki,MID,Man City,20.5,True,,False,True,63
+449,B.Fernandes,MID,Man Utd,8.5,True,,False,False,103

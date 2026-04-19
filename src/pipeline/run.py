@@ -82,6 +82,33 @@ def _latest_bootstrap_cutoff() -> datetime:
     return cutoff.astimezone(timezone.utc)
 
 
+def _gw_is_finished(gw: int, bootstrap: dict) -> bool:
+    """Return True only if the GW is marked finished in the bootstrap snapshot."""
+    for event in bootstrap.get("events", []):
+        if event.get("id") == gw:
+            return bool(event.get("finished", False))
+    return False
+
+
+def _score_recommended_squad(rec_path, live_map: dict) -> int | None:
+    """Score a recommended squad: starters only, captain 2×.
+
+    Returns None if the file doesn't exist.
+    live_map: {element_id: actual_pts}
+    """
+    from pathlib import Path as _Path
+    if not _Path(rec_path).exists():
+        return None
+    df = pd.read_csv(rec_path)
+    starters = df[df["is_starter"] == True]
+    total = 0
+    for _, row in starters.iterrows():
+        pts = live_map.get(int(row["element"]), 0) or 0
+        multiplier = 2 if row.get("is_captain") else 1
+        total += pts * multiplier
+    return total
+
+
 def _score_from_entry_picks(entry_picks: dict) -> int:
     """Extract the user's actual GW score from FPL entry picks response.
 
@@ -551,8 +578,8 @@ def phase_post_gw():
         your_xp = float(your_picks["xP"].sum())
         misses = compute_prediction_misses(your_picks)
 
-    # Write actual_squad.csv and actual_transfers.csv
-    if entry_picks_data and not live_df.empty:
+    # Write actual_squad.csv and actual_transfers.csv — only when GW is fully finished
+    if entry_picks_data and not live_df.empty and _gw_is_finished(gw, bootstrap):
         actual_pts_map = live_df.set_index("element")["total_points"].to_dict()
         from src.pipeline.analysis import build_actual_squad_csv
         actual_squad_df = build_actual_squad_csv(entry_picks_data, bootstrap, actual_pts_map)
@@ -582,16 +609,17 @@ def phase_post_gw():
         except Exception as e:
             logger.warning(f"Could not fetch actual transfers: {e}")
 
-    # Recommended team comparison — use saved squad CSV for accuracy
+    # Recommended team comparison — XI starters only, captain 2×
     recommended_pts = None
     recommended_xp = None
-    squad_rec_path = _post_gw_dir / "squad_recommend.csv"
-    if squad_rec_path.exists() and not live_df.empty:
-        rec_squad_df = pd.read_csv(squad_rec_path)
+    squad_rec_path = _post_gw_dir / "recommended_squad.csv"
+    if not live_df.empty:
         actual_map_rec = live_df.set_index("element")["total_points"].to_dict()
-        rec_squad_df["actual_points"] = rec_squad_df["element"].map(actual_map_rec).fillna(0)
-        recommended_pts = int(rec_squad_df["actual_points"].sum())
-        recommended_xp = float(rec_squad_df["xP"].sum()) if "xP" in rec_squad_df.columns else None
+        recommended_pts = _score_recommended_squad(squad_rec_path, actual_map_rec)
+        if squad_rec_path.exists():
+            rec_squad_df = pd.read_csv(squad_rec_path)
+            starters = rec_squad_df[rec_squad_df["is_starter"] == True]
+            recommended_xp = float(starters["xP"].sum()) if "xP" in starters.columns else None
 
     # Dream team from live data
     dream_pts = None

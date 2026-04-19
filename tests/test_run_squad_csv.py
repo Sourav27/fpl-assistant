@@ -89,3 +89,40 @@ def test_fetch_actual_transfers_hit_taken_when_costs_differ():
     with patch("src.pipeline.run._api_get_with_retry", return_value=mock_resp):
         result = _fetch_actual_transfers(entry_id=1, gw=32, bootstrap=bootstrap)
     assert result[0]["hit_taken"] is True
+
+
+def _make_recommended_squad_csv(tmp_path):
+    """Recommended squad: 2 starters (one captain), 1 bench player."""
+    df = pd.DataFrame([
+        {"element": 1, "name": "Salah",   "xP": 10.0, "is_starter": True,  "bench_order": None, "is_captain": True,  "is_vice_captain": False},
+        {"element": 2, "name": "Saka",    "xP": 8.0,  "is_starter": True,  "bench_order": None, "is_captain": False, "is_vice_captain": True},
+        {"element": 3, "name": "Flekken", "xP": 3.0,  "is_starter": False, "bench_order": 1,    "is_captain": False, "is_vice_captain": False},
+    ])
+    p = tmp_path / "recommended_squad.csv"
+    df.to_csv(p, index=False)
+    return p
+
+
+def test_recommended_pts_uses_starters_only_with_captain_multiplier(tmp_path):
+    """recommended_pts = sum of starters' actual pts, captain counted 2×."""
+    from src.pipeline.run import _score_recommended_squad
+    rec_path = _make_recommended_squad_csv(tmp_path)
+    live_map = {1: 12, 2: 6, 3: 99}  # bench player's pts should be excluded
+    pts = _score_recommended_squad(rec_path, live_map)
+    # Salah (captain): 12 × 2 = 24; Saka: 6; Flekken excluded
+    assert pts == 30
+
+
+def test_recommended_pts_returns_none_when_file_missing(tmp_path):
+    from src.pipeline.run import _score_recommended_squad
+    pts = _score_recommended_squad(tmp_path / "nonexistent.csv", {1: 10})
+    assert pts is None
+
+
+def test_post_gw_skips_actual_squad_when_gw_not_finished():
+    """phase_post_gw must not write actual_squad.csv if bootstrap says finished=False."""
+    from src.pipeline.run import _gw_is_finished
+    bootstrap_unfinished = {"events": [{"id": 33, "finished": False}]}
+    bootstrap_finished   = {"events": [{"id": 33, "finished": True}]}
+    assert _gw_is_finished(33, bootstrap_unfinished) is False
+    assert _gw_is_finished(33, bootstrap_finished) is True

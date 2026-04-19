@@ -21,7 +21,8 @@ import pandas as pd
 from src.config import (
     VAASTAV_DIR, RESULTS_DIR, MODELS_DIR, CURRENT_SEASON,
     ACTIVE_MODEL, ACTIVE_MODELS, BOOTSTRAP_MAX_AGE_HOURS, SNAPSHOTS_DIR,
-    FPL_ENTRY_URL, load_user_config, UserConfigError,
+    FPL_ENTRY_URL, load_user_config, UserConfigError, gw_dir,
+    snapshot_dir as get_snapshot_dir,
 )
 from src.pipeline.fetch import (
     fetch_bootstrap, get_current_gw, get_next_deadline,
@@ -46,6 +47,27 @@ from src.pipeline.optimize import optimize_team
 
 logger = logging.getLogger(__name__)
 
+
+def _build_squad_csv(result: dict) -> pd.DataFrame:
+    xi = result["xi"].copy()
+    xi["is_starter"] = True
+    xi["bench_order"] = pd.NA
+
+    bench = result["bench"].copy().sort_values("xP", ascending=False).reset_index(drop=True)
+    bench["is_starter"] = False
+    bench["bench_order"] = range(1, len(bench) + 1)
+
+    df = pd.concat([xi, bench], ignore_index=True)
+    cap_el = result["captain"]["element"]
+    vc_el = result["vice_captain"]["element"]
+    df["is_captain"] = pd.array([bool(v == cap_el) for v in df["element"]], dtype=object)
+    df["is_vice_captain"] = pd.array([bool(v == vc_el) for v in df["element"]], dtype=object)
+
+    cols = ["element", "name", "position", "team", "xP",
+            "is_starter", "bench_order", "is_captain", "is_vice_captain", "now_cost"]
+    return df[[c for c in cols if c in df.columns]]
+
+
 # Daily CI refresh runs at 07:06 IST (01:36 UTC). A bootstrap snapshot is
 # considered fresh if it was saved after the most recent 07:06 IST cutoff.
 _IST = timezone(timedelta(hours=5, minutes=30))
@@ -60,6 +82,33 @@ def _latest_bootstrap_cutoff() -> datetime:
     return cutoff.astimezone(timezone.utc)
 
 
+def _gw_is_finished(gw: int, bootstrap: dict) -> bool:
+    """Return True only if the GW is marked finished in the bootstrap snapshot."""
+    for event in bootstrap.get("events", []):
+        if event.get("id") == gw:
+            return bool(event.get("finished", False))
+    return False
+
+
+def _score_recommended_squad(rec_path, live_map: dict) -> int | None:
+    """Score a recommended squad: starters only, captain 2×.
+
+    Returns None if the file doesn't exist.
+    live_map: {element_id: actual_pts}
+    """
+    from pathlib import Path as _Path
+    if not _Path(rec_path).exists():
+        return None
+    df = pd.read_csv(rec_path)
+    starters = df[df["is_starter"] == True]
+    total = 0
+    for _, row in starters.iterrows():
+        pts = live_map.get(int(row["element"]), 0) or 0
+        multiplier = 2 if row.get("is_captain") else 1
+        total += pts * multiplier
+    return total
+
+
 def _score_from_entry_picks(entry_picks: dict) -> int:
     """Extract the user's actual GW score from FPL entry picks response.
 
@@ -68,6 +117,27 @@ def _score_from_entry_picks(entry_picks: dict) -> int:
     per-player actual_points sums which miss all of these.
     """
     return entry_picks["entry_history"]["points"]
+
+
+def _fetch_actual_transfers(entry_id: int, gw: int, bootstrap: dict) -> list[dict]:
+    """Fetch and format actual transfers made by the user for a given GW."""
+    el_map = {e["id"]: e.get("web_name", str(e["id"]))
+              for e in bootstrap.get("elements", [])}
+    resp = _api_get_with_retry(f"{FPL_ENTRY_URL}/{entry_id}/transfers/")
+    all_transfers = resp.json()
+    gw_transfers = [t for t in all_transfers if t.get("event") == gw]
+    gw_transfers.sort(key=lambda t: t.get("time", ""))
+    rows = []
+    for rank, t in enumerate(gw_transfers, start=1):
+        rows.append({
+            "gw": gw,
+            "player_out": el_map.get(t["element_out"], str(t["element_out"])),
+            "player_in":  el_map.get(t["element_in"],  str(t["element_in"])),
+            "transfer_rank": rank,
+            "actual_pts_gained": None,
+            "hit_taken": t.get("element_in_cost") != t.get("element_out_cost"),
+        })
+    return rows
 
 
 def _filter_gw_transfers(rec_df: pd.DataFrame, current_gw: int) -> pd.DataFrame:
@@ -87,14 +157,13 @@ def _load_cached_bootstrap(target_gw: int | None = None) -> dict | None:
     This is stricter than a fixed 48-hour window — a snapshot from yesterday
     afternoon is stale by morning even if < 24 h old.
     """
-    snapshot_dir = SNAPSHOTS_DIR
-    if not snapshot_dir.exists():
+    if not SNAPSHOTS_DIR.exists():
         return None
 
     cutoff = _latest_bootstrap_cutoff()
 
     if target_gw:
-        path = snapshot_dir / f"bootstrap_gw{target_gw}.json"
+        path = get_snapshot_dir(CURRENT_SEASON, target_gw) / "bootstrap.json"
         if path.exists():
             mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
             if mtime >= cutoff:
@@ -106,7 +175,12 @@ def _load_cached_bootstrap(target_gw: int | None = None) -> dict | None:
             return None
 
     # No target_gw — use the most recent snapshot if fresh
-    snapshots = sorted(snapshot_dir.glob("bootstrap_gw*.json"), reverse=True)
+    season_dir = SNAPSHOTS_DIR / CURRENT_SEASON
+    snapshots = sorted(
+        season_dir.glob("*/bootstrap.json"),
+        key=lambda p: int(p.parent.name.lstrip("gw")),
+        reverse=True,
+    ) if season_dir.exists() else []
     if not snapshots:
         return None
 
@@ -147,8 +221,9 @@ def phase_pre_deadline():
     print(f"[pre-deadline] Saved xP snapshot for GW{next_gw} ({len(xp)} players)")
 
     # Save bootstrap for reference
-    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(SNAPSHOTS_DIR / f"bootstrap_gw{next_gw}.json", "w") as f:
+    snap_path = get_snapshot_dir(CURRENT_SEASON, next_gw) / "bootstrap.json"
+    snap_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(snap_path, "w") as f:
         json.dump(bootstrap, f)
     print("[pre-deadline] Saved bootstrap snapshot")
 
@@ -207,10 +282,11 @@ def phase_predict(target_gw: int | None = None):
                         print(f"[predict] Found Wayback snapshot {ts} — downloading...")
                         try:
                             bootstrap = fetch_wayback_bootstrap(ts)
-                            SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-                            with open(SNAPSHOTS_DIR / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
+                            snap_path = get_snapshot_dir(CURRENT_SEASON, target_gw) / "bootstrap.json"
+                            snap_path.parent.mkdir(parents=True, exist_ok=True)
+                            with open(snap_path, "w", encoding="utf-8") as f:
                                 json.dump(bootstrap, f)
-                            print(f"[predict] Cached Wayback bootstrap as bootstrap_gw{target_gw}.json")
+                            print(f"[predict] Cached Wayback bootstrap as {snap_path}")
                         except Exception as e:
                             logger.warning(f"Wayback bootstrap download failed: {e}")
                     else:
@@ -224,10 +300,11 @@ def phase_predict(target_gw: int | None = None):
             else:
                 bootstrap = live_bootstrap
                 if target_gw:
-                    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-                    with open(SNAPSHOTS_DIR / f"bootstrap_gw{target_gw}.json", "w", encoding="utf-8") as f:
+                    snap_path = get_snapshot_dir(CURRENT_SEASON, target_gw) / "bootstrap.json"
+                    snap_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(snap_path, "w", encoding="utf-8") as f:
                         json.dump(bootstrap, f)
-                    print(f"[predict] Cached live bootstrap as bootstrap_gw{target_gw}.json")
+                    print(f"[predict] Cached live bootstrap as {snap_path}")
         except Exception as e:
             logger.warning(f"Could not fetch bootstrap from API: {e}. Proceeding without (stale data risk).")
 
@@ -387,8 +464,15 @@ def phase_predict(target_gw: int | None = None):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     gw_label = f"gw{target_gw}" if target_gw else "latest"
 
+    # Determine per-GW output directory
+    if target_gw:
+        out_dir = RESULTS_DIR / CURRENT_SEASON / f"gw{target_gw}"
+    else:
+        out_dir = RESULTS_DIR / "latest"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     # Save full predictions for recommend + analysis phases
-    pred_path = RESULTS_DIR / f"predictions_{gw_label}.csv"
+    pred_path = out_dir / "predictions.csv"
     save_full_predictions(predictions, pred_path)
     print(f"[predict] Saved full predictions ({len(predictions)} players) to {pred_path}")
 
@@ -397,13 +481,13 @@ def phase_predict(target_gw: int | None = None):
     except Exception as e:
         logger.warning(f"optimize_team failed (likely infeasible LP — small player pool): {e}")
         empty = pd.DataFrame(columns=["element", "name", "position", "team", "xP", "now_cost"])
-        empty.to_csv(RESULTS_DIR / f"xi_{gw_label}.csv", index=False)
-        empty.to_csv(RESULTS_DIR / f"squad_{gw_label}.csv", index=False)
+        empty.to_csv(out_dir / "xi.csv", index=False)
+        empty.to_csv(out_dir / "optimal_squad.csv", index=False)
         print(f"[predict] Optimization infeasible — saved empty CSVs for {gw_label}")
         return {"xi": empty, "squad": empty, "captain": None, "vice_captain": None, "total_xp": 0.0}
 
-    result["xi"].to_csv(RESULTS_DIR / f"xi_{gw_label}.csv", index=False)
-    result["squad"].to_csv(RESULTS_DIR / f"squad_{gw_label}.csv", index=False)
+    result["xi"].to_csv(out_dir / "xi.csv", index=False)
+    _build_squad_csv(result).to_csv(out_dir / "optimal_squad.csv", index=False)
 
     print(f"\n{'='*50}")
     print(f"OPTIMAL XI for GW{target_gw or '?'}:")
@@ -443,9 +527,9 @@ def phase_post_gw():
     live_df = fetch_live_gw_data(target_gw=gw, bootstrap_data=bootstrap)
 
     if not live_df.empty:
-        gw_dir = VAASTAV_DIR / "data" / CURRENT_SEASON / "gws"
-        gw_dir.mkdir(parents=True, exist_ok=True)
-        live_path = gw_dir / f"gw{gw}_live.csv"
+        live_gw_dir = VAASTAV_DIR / "data" / CURRENT_SEASON / "gws"
+        live_gw_dir.mkdir(parents=True, exist_ok=True)
+        live_path = live_gw_dir / f"gw{gw}_live.csv"
         live_df.to_csv(live_path, index=False)
         print(f"[post-gw] Saved {len(live_df)} player rows to {live_path}")
     else:
@@ -464,7 +548,8 @@ def phase_post_gw():
 
     # Load predictions for this GW
     gw_label = f"gw{gw}"
-    pred_path = RESULTS_DIR / f"predictions_{gw_label}.csv"
+    _post_gw_dir = RESULTS_DIR / CURRENT_SEASON / f"gw{gw}"
+    pred_path = _post_gw_dir / "predictions.csv"
     if not pred_path.exists():
         print(f"[post-gw] Predictions file {pred_path} not found — skipping analysis")
         return
@@ -493,16 +578,48 @@ def phase_post_gw():
         your_xp = float(your_picks["xP"].sum())
         misses = compute_prediction_misses(your_picks)
 
-    # Recommended team comparison — use saved squad CSV for accuracy
+    # Write actual_squad.csv and actual_transfers.csv — only when GW is fully finished
+    if entry_picks_data and not live_df.empty and _gw_is_finished(gw, bootstrap):
+        actual_pts_map = live_df.set_index("element")["total_points"].to_dict()
+        from src.pipeline.analysis import build_actual_squad_csv
+        actual_squad_df = build_actual_squad_csv(entry_picks_data, bootstrap, actual_pts_map)
+        actual_squad_path = _post_gw_dir / "actual_squad.csv"
+        _post_gw_dir.mkdir(parents=True, exist_ok=True)
+        actual_squad_df.to_csv(actual_squad_path, index=False)
+        print(f"[post-gw] Saved actual_squad.csv ({len(actual_squad_df)} players)")
+
+        # Write actual_transfers.csv
+        try:
+            transfers = _fetch_actual_transfers(entry_id, gw, bootstrap)
+            if transfers:
+                pts_by_name = actual_squad_df.set_index("name")["actual_pts"].to_dict()
+                for t in transfers:
+                    if t["player_in"] in pts_by_name and t["player_out"] in pts_by_name:
+                        t["actual_pts_gained"] = (
+                            (pts_by_name.get(t["player_in"], 0) or 0)
+                            - (pts_by_name.get(t["player_out"], 0) or 0)
+                        )
+                transfers_path = _post_gw_dir.parent / "actual_transfers.csv"
+                transfers_df = pd.DataFrame(transfers)
+                if transfers_path.exists():
+                    transfers_df.to_csv(transfers_path, mode="a", header=False, index=False)
+                else:
+                    transfers_df.to_csv(transfers_path, index=False)
+                print(f"[post-gw] Appended {len(transfers)} transfer(s) to actual_transfers.csv")
+        except Exception as e:
+            logger.warning(f"Could not fetch actual transfers: {e}")
+
+    # Recommended team comparison — XI starters only, captain 2×
     recommended_pts = None
     recommended_xp = None
-    squad_rec_path = RESULTS_DIR / f"squad_recommend_{gw_label}.csv"
-    if squad_rec_path.exists() and not live_df.empty:
-        rec_squad_df = pd.read_csv(squad_rec_path)
+    squad_rec_path = _post_gw_dir / "recommended_squad.csv"
+    if not live_df.empty:
         actual_map_rec = live_df.set_index("element")["total_points"].to_dict()
-        rec_squad_df["actual_points"] = rec_squad_df["element"].map(actual_map_rec).fillna(0)
-        recommended_pts = int(rec_squad_df["actual_points"].sum())
-        recommended_xp = float(rec_squad_df["xP"].sum()) if "xP" in rec_squad_df.columns else None
+        recommended_pts = _score_recommended_squad(squad_rec_path, actual_map_rec)
+        if squad_rec_path.exists():
+            rec_squad_df = pd.read_csv(squad_rec_path)
+            starters = rec_squad_df[rec_squad_df["is_starter"] == True]
+            recommended_xp = float(starters["xP"].sum()) if "xP" in starters.columns else None
 
     # Dream team from live data
     dream_pts = None
@@ -555,7 +672,7 @@ def phase_post_gw():
     # Intentionally the full squad (not just XI) so it reflects bench-boost potential.
     wildcard_pts = None
     wildcard_xp = None
-    squad_path = RESULTS_DIR / f"squad_{gw_label}.csv"
+    squad_path = _post_gw_dir / "optimal_squad.csv"
     if squad_path.exists() and not live_df.empty:
         squad_df = pd.read_csv(squad_path)
         actual_map_wc = live_df.set_index("element")["total_points"].to_dict()
@@ -575,6 +692,15 @@ def phase_post_gw():
         picks_df=your_picks if not your_picks.empty else None,
     )
     print(f"[post-gw] Accuracy log updated: {log_path}")
+
+    try:
+        import subprocess
+        subprocess.run(
+            ["python", "scripts/generate_reports.py", "--from-gw", "31"],
+            check=True
+        )
+    except Exception as e:
+        logger.warning(f"generate_reports failed (non-fatal): {e}")
 
 
 def _is_wildcard_mode(user_state, wildcard_flag: bool) -> bool:
@@ -605,7 +731,11 @@ def phase_recommend(
 
     # Load predictions
     gw_label = f"gw{target_gw}" if target_gw else "latest"
-    pred_path = RESULTS_DIR / f"predictions_{gw_label}.csv"
+    if target_gw:
+        _rec_out_dir = RESULTS_DIR / CURRENT_SEASON / f"gw{target_gw}"
+    else:
+        _rec_out_dir = RESULTS_DIR / "latest"
+    pred_path = _rec_out_dir / "predictions.csv"
     if not pred_path.exists():
         print(f"[recommend] ERROR: Predictions not found at {pred_path}. Run 'predict' first.")
         return None
@@ -680,7 +810,7 @@ def phase_recommend(
     print(f"Bank after: £{plan.get('bank_after', 0):.1f}m")
 
     # Save CSV
-    out_path = RESULTS_DIR / f"recommend_{gw_label}.csv"
+    out_path = _rec_out_dir / "recommend.csv"
     save_recommend_csv(plan, out_path, start_gw=target_gw or 0)
     print(f"\nSaved to {out_path}")
 
@@ -702,10 +832,10 @@ def phase_recommend(
             if t.get("hit_cost", 0) == 0
         )
         squad_rec["free_transfers_after"] = max(1, user_state.free_transfers - free_used)
-        squad_rec_path = RESULTS_DIR / f"squad_recommend_{gw_label}.csv"
+        squad_rec_path = _rec_out_dir / "squad_recommend.csv"
         squad_rec.to_csv(squad_rec_path, index=False)
         xi_rec = select_xi(squad_rec)
-        xi_rec_path = RESULTS_DIR / f"xi_recommend_{gw_label}.csv"
+        xi_rec_path = _rec_out_dir / "xi_recommend.csv"
         xi_rec.to_csv(xi_rec_path, index=False)
         print(f"Saved post-transfer squad to {squad_rec_path}")
         print(f"Saved post-transfer XI to {xi_rec_path}")

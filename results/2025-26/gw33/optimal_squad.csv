@@ -1,0 +1,16 @@
+element,name,position,team,xP,is_starter,bench_order,is_captain,is_vice_captain,now_cost
+74,Truffert,DEF,Bournemouth,12.75,True,,,,47.0
+82,Semenyo,MID,Man City,17.03,True,,,,82.0
+97,Evanilson,FWD,Bournemouth,8.96,False,1.0,,,67.0
+163,Hinshelwood,MID,Brighton,21.09,True,,,,51.0
+164,O'Riley,MID,Brighton,10.22,True,,,,55.0
+169,Gomez,MID,Brighton,13.86,True,,,,49.0
+215,Flemming,FWD,Burnley,9.04,True,,,,53.0
+220,Sánchez,GK,Chelsea,9.31,True,,,,48.0
+224,Cucurella,DEF,Chelsea,10.35,True,,,,60.0
+232,Tosin,DEF,Chelsea,7.61,False,2.0,,,40.0
+416,Bernardo,MID,Man City,9.7,True,,,,62.0
+470,Dúbravka,GK,Burnley,5.91,False,4.0,,,40.0
+691,Calvert-Lewin,FWD,Leeds,9.55,True,,,,56.0
+706,Justin,DEF,Leeds,6.859999999999999,False,3.0,,,39.0
+713,A.Jimenez,DEF,Bournemouth,11.55,True,,,,45.0

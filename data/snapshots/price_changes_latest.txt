@@ -1,0 +1,1 @@
+No previous snapshot found for GW33 or GW32; skipping price-change summary.

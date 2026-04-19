@@ -152,3 +152,55 @@ class TestSpearmanRho:
         log = pd.read_csv(log_path)
         assert "spearman_rho" in log.columns
         assert not pd.isna(log.iloc[0]["spearman_rho"])
+
+
+def test_append_accuracy_log_writes_season_column(tmp_path):
+    log = tmp_path / "accuracy_log.csv"
+    append_accuracy_log(log, gw=31, season="2025-26",
+                        your_pts=44, your_xp=44.3,
+                        recommended_pts=8, recommended_xp=38.8)
+    import pandas as pd
+    df = pd.read_csv(log)
+    assert "season" in df.columns
+    assert df.iloc[0]["season"] == "2025-26"
+
+def test_append_accuracy_log_season_defaults_to_current_season(tmp_path):
+    from src.config import CURRENT_SEASON
+    log = tmp_path / "accuracy_log.csv"
+    append_accuracy_log(log, gw=31, your_pts=44, your_xp=44.3,
+                        recommended_pts=8, recommended_xp=38.8)
+    import pandas as pd
+    df = pd.read_csv(log)
+    assert df.iloc[0]["season"] == CURRENT_SEASON
+
+def test_build_actual_squad_csv_columns():
+    from src.pipeline.analysis import build_actual_squad_csv
+    entry_picks = {
+        "picks": [
+            {"element": 1, "position": 1, "multiplier": 2, "is_captain": True, "is_vice_captain": False},
+            {"element": 2, "position": 12, "multiplier": 0, "is_captain": False, "is_vice_captain": True},
+        ]
+    }
+    bootstrap = {
+        "elements": [
+            {"id": 1, "web_name": "Salah", "element_type": 3, "team": 14, "now_cost": 130},
+            {"id": 2, "web_name": "Saka",  "element_type": 3, "team": 1,  "now_cost": 100},
+        ],
+        "teams": [{"id": 1, "name": "Arsenal"}, {"id": 14, "name": "Liverpool"}],
+        "element_types": [
+            {"id": 3, "singular_name_short": "MID"},
+        ],
+    }
+    actual_pts = {1: 20, 2: 6}
+    df = build_actual_squad_csv(entry_picks, bootstrap, actual_pts)
+    assert list(df.columns) == [
+        "element", "name", "position", "team", "actual_pts",
+        "is_starter", "bench_order", "is_captain", "is_vice_captain", "now_cost"
+    ]
+    salah = df[df["element"] == 1].iloc[0]
+    assert salah["actual_pts"] == 20
+    assert salah["is_captain"] is True
+    assert salah["is_starter"] is True
+    saka = df[df["element"] == 2].iloc[0]
+    assert saka["is_starter"] is False
+    assert saka["bench_order"] == 1

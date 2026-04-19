@@ -59,3 +59,25 @@ def test_metrics_ledger_path_is_in_models_dir():
 def test_charts_dir_is_in_models_dir():
     from src.config import CHARTS_DIR, MODELS_DIR
     assert CHARTS_DIR.parent == MODELS_DIR
+
+
+from src.config import gw_dir, snapshot_dir, SNAPSHOTS_DIR, DATA_DIR
+
+
+def test_gw_dir_returns_correct_path():
+    p = gw_dir("2025-26", 31)
+    assert str(p).replace("\\", "/").endswith("results/2025-26/gw31")
+
+
+def test_snapshot_dir_returns_correct_path():
+    p = snapshot_dir("2025-26", 31)
+    assert str(p).replace("\\", "/").endswith("data/snapshots/2025-26/gw31")
+
+
+def test_snapshots_dir_is_under_data():
+    assert str(SNAPSHOTS_DIR).replace("\\", "/").endswith("data/snapshots")
+
+
+def test_signal_unresolved_csv_removed():
+    import src.config as cfg
+    assert not hasattr(cfg, "SIGNAL_UNRESOLVED_CSV")

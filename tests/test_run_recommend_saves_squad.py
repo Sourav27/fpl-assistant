@@ -43,11 +43,13 @@ def _mock_user_state():
 
 
 def test_squad_recommend_csv_saved(tmp_path):
-    """phase_recommend must save squad_recommend_gw{N}.csv with 15 rows."""
-    pred_path = tmp_path / "predictions_gw32.csv"
-    PREDICTIONS.to_csv(pred_path, index=False)
+    """phase_recommend must save squad_recommend.csv with 15 rows."""
+    gw32_dir = tmp_path / "2025-26" / "gw32"
+    gw32_dir.mkdir(parents=True)
+    PREDICTIONS.to_csv(gw32_dir / "predictions.csv", index=False)
 
     with patch("src.pipeline.run.RESULTS_DIR", tmp_path), \
+         patch("src.pipeline.run.CURRENT_SEASON", "2025-26"), \
          patch("src.pipeline.run.load_user_config", return_value={
              "teams": {"default": {"entry_id": 1}},
              "preferences": {"horizon_gws": 1, "max_hit_points": 8, "fdr_sensitivity": 0.15},
@@ -59,19 +61,21 @@ def test_squad_recommend_csv_saved(tmp_path):
         from src.pipeline.run import phase_recommend
         phase_recommend(target_gw=32)
 
-    squad_path = tmp_path / "squad_recommend_gw32.csv"
-    assert squad_path.exists(), "squad_recommend_gw32.csv not written"
+    squad_path = gw32_dir / "squad_recommend.csv"
+    assert squad_path.exists(), "squad_recommend.csv not written"
     df = pd.read_csv(squad_path)
     assert len(df) == 15
     assert "name" in df.columns
 
 
 def test_xi_recommend_csv_saved(tmp_path):
-    """phase_recommend must save xi_recommend_gw{N}.csv with 11 rows."""
-    pred_path = tmp_path / "predictions_gw32.csv"
-    PREDICTIONS.to_csv(pred_path, index=False)
+    """phase_recommend must save xi_recommend.csv with 11 rows."""
+    gw32_dir = tmp_path / "2025-26" / "gw32"
+    gw32_dir.mkdir(parents=True)
+    PREDICTIONS.to_csv(gw32_dir / "predictions.csv", index=False)
 
     with patch("src.pipeline.run.RESULTS_DIR", tmp_path), \
+         patch("src.pipeline.run.CURRENT_SEASON", "2025-26"), \
          patch("src.pipeline.run.load_user_config", return_value={
              "teams": {"default": {"entry_id": 1}},
              "preferences": {"horizon_gws": 1, "max_hit_points": 8, "fdr_sensitivity": 0.15},
@@ -83,7 +87,7 @@ def test_xi_recommend_csv_saved(tmp_path):
         from src.pipeline.run import phase_recommend
         phase_recommend(target_gw=32)
 
-    xi_path = tmp_path / "xi_recommend_gw32.csv"
-    assert xi_path.exists(), "xi_recommend_gw32.csv not written"
+    xi_path = gw32_dir / "xi_recommend.csv"
+    assert xi_path.exists(), "xi_recommend.csv not written"
     df = pd.read_csv(xi_path)
     assert len(df) == 11

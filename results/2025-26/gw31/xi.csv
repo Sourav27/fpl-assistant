@@ -1,0 +1,12 @@
+element,xP,_fallback,now_cost,team,position,name,code,raw_xP
+8,6.8,True,75,Team3,MID,MID One,3001,6.8
+9,6.5,True,70,Team4,MID,MID Two,3002,6.5
+10,6.0,True,65,Team5,MID,MID Three,3003,6.0
+11,5.8,True,60,Team6,MID,MID Four,3004,5.8
+1,4.5,True,55,Team1,GK,GK One,1001,4.5
+3,5.0,True,55,Team3,DEF,DEF One,2001,5.0
+6,5.2,True,52,Team1,DEF,DEF Four,2004,5.2
+7,4.9,True,53,Team2,DEF,DEF Five,2005,4.9
+13,7.5,True,90,Team1,FWD,FWD One,4001,7.5
+14,7.0,True,85,Team6,FWD,FWD Two,4002,7.0
+15,6.5,True,80,Team7,FWD,FWD Three,4003,6.5

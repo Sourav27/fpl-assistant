@@ -1,0 +1,16 @@
+element,name,position,team,xP,is_starter,bench_order,is_captain,is_vice_captain,now_cost
+178,Welbeck,FWD,Brighton,5.73,False,2.0,,,61.0
+187,Walker,DEF,Burnley,7.6,True,,,,44.0
+373,Virgil,DEF,Liverpool,6.47,True,,,,62.0
+449,B.Fernandes,MID,Man Utd,8.51,True,,,,101.0
+224,Cucurella,DEF,Chelsea,6.27,False,1.0,,,60.0
+31,G.Jesus,FWD,Arsenal,7.1,True,,,,64.0
+220,Sánchez,GK,Chelsea,4.27,True,,,,49.0
+430,Haaland,FWD,Man City,5.73,False,3.0,,,146.0
+531,Ballard,DEF,Sunderland,7.38,True,,,,47.0
+292,Mykolenko,DEF,Everton,6.59,True,,,,49.0
+82,Semenyo,MID,Man City,12.04,True,,,,83.0
+431,Bayindir,GK,Man Utd,4.21,False,4.0,,,47.0
+452,Amad,MID,Man Utd,9.37,True,,,,62.0
+169,Gomez,MID,Brighton,7.08,True,,,,49.0
+163,Hinshelwood,MID,Brighton,9.81,True,,,,51.0

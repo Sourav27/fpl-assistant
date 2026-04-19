@@ -120,13 +120,18 @@ def append_accuracy_log(
     wildcard_xp: float | None = None,
     dream_team_pts: int | None = None,
     picks_df: pd.DataFrame | None = None,
+    season: str | None = None,
 ) -> None:
     """Append one row per GW to the season accuracy log CSV.
 
     dream_pts and dream_team_pts are aliases; dream_team_pts takes precedence.
     picks_df: optional DataFrame with xP and actual_points columns for Spearman ρ.
+    season: season string (e.g. '2025-26'); defaults to CURRENT_SEASON from config.
     """
     from datetime import datetime, timezone
+    from src.config import CURRENT_SEASON
+    if season is None:
+        season = CURRENT_SEASON
     if benchmarks is None:
         benchmarks = {}
     # Reconcile dream_pts / dream_team_pts aliases
@@ -139,6 +144,7 @@ def append_accuracy_log(
 
     row = {
         "gw": gw,
+        "season": season,
         "your_pts": your_pts,
         "your_predicted_xp": round(your_xp, 2) if your_xp is not None else None,
         "recommended_pts": recommended_pts,
@@ -180,3 +186,53 @@ def append_accuracy_log(
     else:
         df_all = df_new
     df_all.to_csv(path, index=False)
+
+
+def build_actual_squad_csv(
+    entry_picks: dict,
+    bootstrap: dict,
+    actual_pts_by_element: dict,
+) -> pd.DataFrame:
+    """Build a DataFrame of the actual squad from FPL entry picks and bootstrap data.
+
+    Returns one row per player with columns:
+    element, name, position, team, actual_pts,
+    is_starter, bench_order, is_captain, is_vice_captain, now_cost
+    """
+    el_map = {e["id"]: e for e in bootstrap.get("elements", [])}
+    team_map = {t["id"]: t["name"] for t in bootstrap.get("teams", [])}
+    pos_map = {pt["id"]: pt["singular_name_short"]
+               for pt in bootstrap.get("element_types", [])}
+
+    picks = entry_picks.get("picks", [])
+    starters = {p["element"] for p in picks if p["position"] <= 11}
+    bench_picks = sorted(
+        [p for p in picks if p["position"] > 11],
+        key=lambda p: p["position"]
+    )
+    bench_order = {p["element"]: i + 1 for i, p in enumerate(bench_picks)}
+
+    rows = []
+    for pick in picks:
+        el_id = pick["element"]
+        el = el_map.get(el_id, {})
+        rows.append({
+            "element": el_id,
+            "name": el.get("web_name", str(el_id)),
+            "position": pos_map.get(el.get("element_type"), "?"),
+            "team": team_map.get(el.get("team"), "?"),
+            "actual_pts": actual_pts_by_element.get(el_id),
+            "is_starter": bool(el_id in starters),
+            "bench_order": bench_order.get(el_id),
+            "is_captain": bool(pick.get("is_captain", False)),
+            "is_vice_captain": bool(pick.get("is_vice_captain", False)),
+            "now_cost": el.get("now_cost", 0) / 10,
+        })
+    df = pd.DataFrame(rows, columns=[
+        "element", "name", "position", "team", "actual_pts",
+        "is_starter", "bench_order", "is_captain", "is_vice_captain", "now_cost"
+    ])
+    # Keep boolean columns as Python bool (object dtype) so identity checks work
+    for col in ("is_starter", "is_captain", "is_vice_captain"):
+        df[col] = df[col].astype(object)
+    return df

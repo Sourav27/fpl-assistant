@@ -14,16 +14,17 @@ from unittest.mock import patch, MagicMock
 
 @pytest.fixture
 def sample_features():
-    """Minimal feature DataFrame: 2 positions × 5 GWs × 3 players = 30 rows.
+    """Minimal feature DataFrame: 2 positions × 5 GWs × 2 players = 20 rows.
     Includes a current-season split (season="2025-26") and a training split.
     """
     rows = []
     for season, gws in [("2024-25", range(1, 6)), ("2025-26", range(1, 6))]:
         for gw in gws:
             for code, pos in [(1, "GK"), (2, "MID")]:
+                # Vary total_points by GW to avoid ConstantInputWarning in spearmanr
                 rows.append({
                     "code": code, "element": code, "season": season, "GW": gw,
-                    "position": pos, "total_points": 4 + code,
+                    "position": pos, "total_points": 4 + code + (gw % 3),
                     **{f"feat_{i}": float(i + gw) for i in range(6)},
                 })
     return pd.DataFrame(rows)
@@ -32,7 +33,8 @@ def sample_features():
 @pytest.fixture
 def dummy_model():
     m = MagicMock()
-    m.predict.side_effect = lambda X: [3.5] * len(X)
+    # Vary predictions by input index to avoid ConstantInputWarning
+    m.predict.side_effect = lambda X: [3.5 + (i % 2) for i in range(len(X))]
     m.feature_importances_ = [0.3, 0.2, 0.2, 0.1, 0.1, 0.1]
     m.feature_names_in_ = [f"feat_{i}" for i in range(6)]
     return m
@@ -149,7 +151,7 @@ class TestEvaluateCurrentSeason:
         call_rows = []
         def capture_predict(X):
             call_rows.append(len(X))
-            return [3.0] * len(X)
+            return [3.0 + (i % 2) for i in range(len(X))]
         dummy_model.predict.side_effect = capture_predict
         evaluate_current_season(
             model=dummy_model, position="GK",

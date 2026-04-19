@@ -1,15 +1,14 @@
 # CLAUDE.md — FPL Optimization Project
 
-Academic study project (2023, "IIM Blasters" team) for Fantasy Premier League prediction and team selection using ML-based point prediction and constrained portfolio optimization.
+Fantasy Premier League prediction and team selection using ML-based point prediction (Random Forest) and constrained portfolio optimization (PuLP ILP). Built for live weekly use in the 2025-26 season.
 
-There are two distinct systems in this repo: the **original notebook pipeline** (research/historical) and the **weekly production pipeline** (`src/pipeline/`, live GW use).
+The active production system is `src/pipeline/`. Everything in `_original/` is archived research — do not extend it.
 
 ---
 
 ## Tech Stack
 
-- **Python**: pandas, scikit-learn, xgboost, pulp, beautifulsoup4
-- **R**: lpSolve — legacy notebooks only. Do not extend. PuLP has replaced it for live optimization.
+- **Python**: pandas, scikit-learn, xgboost, pulp, beautifulsoup4, matplotlib
 
 ---
 
@@ -18,22 +17,23 @@ There are two distinct systems in this repo: the **original notebook pipeline** 
 ```
 fpl-assistant/
 ├── _original/                # Archived research code (git-ignored, NOT FOR EXTENSION)
-│   ├── notebooks/            #   7 Jupyter notebooks (research/historical only)
-│   ├── optimization/         #   10 R scripts (lpSolve; DO NOT USE — PuLP replaced)
-│   └── data_collection/      #   10 Python scripts (legacy FPL/Understat/FBref)
 ├── data/
-│   └── Fantasy-Premier-League/  # vaastav dataset — clone separately (see Data Setup)
+│   ├── Fantasy-Premier-League/  # vaastav dataset — clone separately (see Data Setup)
+│   └── snapshots/
+│       └── 2025-26/
+│           └── gw{N}/
+│               └── bootstrap.json    # Per-GW bootstrap snapshot
 ├── docs/
-│   ├── fpl-rules.md             # Full FPL constraint reference (scoring, transfers, chips)
-│   ├── glossary.md              # All pipeline variables: identity, FDR, features, optimizer, config
-│   ├── improvements-roadmap.md  # P1-P5 roadmap with research insights
-│   └── superpowers/specs/       # Implementation specs for improvements
+│   ├── fpl-rules.md             # Full FPL constraint reference
+│   ├── glossary.md              # All pipeline variables: FDR, features, optimizer, config
+│   ├── improvements-roadmap.md  # P1-P5 roadmap
+│   └── superpowers/specs/       # Implementation specs
 ├── src/
-│   ├── config.py                # Central config — ACTIVE_MODEL path, seasons, API URLs, load_user_config()
-│   └── pipeline/                # Active weekly production pipeline (Python/PuLP)
+│   ├── config.py                # Central config — ACTIVE_MODEL, seasons, API URLs, gw_dir(), snapshot_dir()
+│   └── pipeline/
 │       ├── prepare.py           # Build multi-season dataset; attaches persistent player code
 │       ├── features.py          # Vectorized rolling/momentum feature engineering
-│       ├── predict.py           # Load model, generate xP predictions; saves predictions_gw{N}.csv
+│       ├── predict.py           # Load model, generate xP predictions
 │       ├── availability.py      # Hybrid availability filter (hard exclude / soft scale)
 │       ├── optimize.py          # PuLP ILP — squad + XI + captain selection
 │       ├── fetch.py             # FPL API calls with exponential backoff
@@ -41,40 +41,32 @@ fpl-assistant/
 │       ├── recommend.py         # Multi-GW ILP transfer planner with FDR weighting
 │       ├── analysis.py          # Post-match analysis: prediction misses, dream team, accuracy log
 │       └── run.py               # CLI entry point (6 phases)
-├── tests/                   # pytest unit + integration tests (~350 tests)
+├── tests/                       # pytest unit + integration tests (~350 tests)
 ├── scripts/
 │   ├── fetch_bootstrap_snapshots.py  # Called by GitHub Actions daily_bootstrap.yml
 │   └── generate_reports.py           # Generates rank comparison PNGs from accuracy_log.csv
-├── models/                  # Trained .sav files — git-ignored; regenerate via retrain
-├── data/
-│   ├── Fantasy-Premier-League/       # vaastav dataset — clone separately (see Data Setup)
-│   └── snapshots/
-│       └── 2025-26/
-│           └── gw{N}/
-│               └── bootstrap.json    # Per-GW bootstrap snapshot (moved from results/snapshots/)
+├── models/                      # Trained .sav files — git-ignored; regenerate via retrain
 ├── results/
-│   ├── accuracy_log.csv              # GW-by-GW performance log (your pts, recommended pts, xP, rank)
+│   ├── accuracy_log.csv              # GW-by-GW performance: your pts, recommended pts, xP, rank
 │   ├── 2025-26/
-│   │   ├── actual_transfers.csv      # All actual transfers made across GWs
+│   │   ├── actual_transfers.csv      # All actual transfers made across GWs (appended each post-gw)
 │   │   └── gw{N}/
 │   │       ├── predictions.csv       # Model xP predictions for all players
-│   │       ├── optimal_squad.csv     # Full 15-player squad with captain/VC, is_starter, bench_order
-│   │       ├── recommended_squad.csv # Post-transfer squad (after recommend phase)
+│   │       ├── optimal_squad.csv     # 15-player squad; captain = highest xP starter
+│   │       ├── recommended_squad.csv # Post-transfer squad (written by recommend phase)
 │   │       ├── recommend.csv         # Transfer plan output
-│   │       └── actual_squad.csv      # Actual squad played (written by post-gw, only if GW finished)
+│   │       └── actual_squad.csv      # Actual squad played (written by post-gw; GW finished only)
 │   └── reports/
 │       ├── rank_comparison_gw.png    # Per-GW bar chart: your pts vs optimal vs recommended
 │       └── rank_comparison_season.png # Cumulative season line chart
-├── logs/                    # Local run output — git-ignored
-├── user_config.example.yaml # Template — copy to user_config.yaml and fill in entry_id
-├── user_config.yaml         # User team IDs & preferences (git-ignored, required for recommend/post-gw analysis)
-├── requirements.txt
-└── .gitignore
+├── user_config.example.yaml    # Template — copy to user_config.yaml and fill in entry_id
+├── user_config.yaml            # User team IDs & preferences (git-ignored)
+└── requirements.txt
 ```
 
 ---
 
-## Weekly Pipeline — Quick Start
+## Weekly Pipeline
 
 ```bash
 pip install -r requirements.txt
@@ -84,38 +76,34 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 ### CLI Phases
 
 ```bash
-# Phase 1 — before GW deadline: fetch bootstrap, save xP snapshot
-#            Writes: data/snapshots/2025-26/gw{N}/bootstrap.json
+# Phase 1 — before GW deadline
+#   Writes: data/snapshots/2025-26/gw{N}/bootstrap.json
 python -m src.pipeline.run pre-deadline
 
-# Phase 2 — generate team selection
-#            Writes: results/2025-26/gw{N}/predictions.csv
-#                    results/2025-26/gw{N}/optimal_squad.csv  (captain = highest xP starter)
+# Phase 2 — after deadline: generate predictions and optimal team
+#   Writes: results/2025-26/gw{N}/predictions.csv
+#           results/2025-26/gw{N}/optimal_squad.csv  (captain = highest xP starter)
 python -m src.pipeline.run predict --gw <N>
 
-# Phase 2b — transfer recommendations (requires user_config.yaml + predictions.csv)
-#             Writes: results/2025-26/gw{N}/recommend.csv
-#                     results/2025-26/gw{N}/recommended_squad.csv
+# Phase 2b — transfer recommendations (requires user_config.yaml)
+#   Writes: results/2025-26/gw{N}/recommend.csv
+#           results/2025-26/gw{N}/recommended_squad.csv
 python -m src.pipeline.run recommend --gw <N>
-python -m src.pipeline.run recommend --gw <N> --horizon 3          # plan 3 GWs ahead
-python -m src.pipeline.run recommend --gw <N> --wildcard           # unconstrained rebuild
-python -m src.pipeline.run recommend --gw <N> --team alt           # use alt team from config
+python -m src.pipeline.run recommend --gw <N> --horizon 3     # plan 3 GWs ahead
+python -m src.pipeline.run recommend --gw <N> --wildcard      # unconstrained rebuild
+python -m src.pipeline.run recommend --gw <N> --team alt      # use alt team from config
 
-# Phase 3 — after GW ends: collect live results + post-match analysis
-#            Writes: results/2025-26/gw{N}/actual_squad.csv  (only if bootstrap finished=True)
-#                    results/2025-26/actual_transfers.csv     (appended)
-#                    results/accuracy_log.csv                 (appended)
-#                    results/reports/rank_comparison_gw.png   (regenerated)
-#                    results/reports/rank_comparison_season.png (regenerated)
+# Phase 3 — after GW finishes: collect actual results and update reports
+#   Writes: results/2025-26/gw{N}/actual_squad.csv   (only if bootstrap finished=True)
+#           results/2025-26/actual_transfers.csv      (appended)
+#           results/accuracy_log.csv                  (appended)
+#           results/reports/*.png                     (regenerated)
 python -m src.pipeline.run post-gw
 
-# Phase 4 — retrain model on expanded data
+# Phase 4 — retrain model
 python -m src.pipeline.run retrain --gw <N>
 
-# Or run phases 1+2 together
-python -m src.pipeline.run full
-
-# Regenerate performance charts at any time (e.g. after editing accuracy_log.csv)
+# Regenerate performance charts at any time
 python scripts/generate_reports.py --from-gw 31
 ```
 
@@ -123,143 +111,60 @@ python scripts/generate_reports.py --from-gw 31
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--gw N` | — | Target gameweek (must match a saved `predictions_gw{N}.csv`) |
+| `--gw N` | — | Target gameweek (must match a saved `predictions.csv` under `gw{N}/`) |
 | `--horizon N` | from `user_config.yaml` | GWs to plan ahead (1–5) |
-| `--wildcard` | false | Treat as wildcard/free-hit — full unconstrained squad rebuild |
+| `--wildcard` | false | Full unconstrained squad rebuild |
 | `--team KEY` | `default` | Team key from `user_config.yaml` (`default` or `alt`) |
 
 ### Model Management
 
-`ACTIVE_MODEL` in `src/config.py` controls which model is used. To promote a newly trained model:
-```python
-# src/config.py
-ACTIVE_MODEL = MODELS_DIR / "rf_model_gw<N>.sav"
-```
-If the model file is missing or has mismatched feature names, the pipeline automatically falls back to FPL API `ep_next` values.
-
-### Model Promotion via GitHub Releases (Track I — Automated)
-
-Promotion is now **fully automated** by `src/pipeline/promote.py`. Running `retrain` triggers the full pipeline:
-
-1. Walk-forward evaluation on current season (per-GW ρ, MAE, hauler MAE)
-2. Per-position benchmark comparison against `models/benchmark.json`
-3. Positions that improve test ρ are promoted; others retain the current best model
-4. Charts generated to `models/charts/` and attached to GitHub Release
-5. `active_models.json` manifest published as a release asset
-6. CI reads the manifest to download only the promoted model files
-
-**Release tag format:** `model-YYYYMMDD` (e.g. `model-20260412`)
-
-**Manual promotion (if needed):**
-```bash
-python -m src.pipeline.run retrain --gw <N>
-```
-No further steps needed — the pipeline handles benchmarking, release, and manifest automatically.
-
-**To inspect the benchmark:**
-```bash
-cat models/benchmark.json
-```
-
-**To view metrics history:**
-```python
-import json
-from pathlib import Path
-for line in Path('models/metrics_history.jsonl').read_text().splitlines():
-    r = json.loads(line)
-    print(f"{r['date']} {r['position']}: test_rho={r['test_rho']:.3f} promoted={r['promoted']}")
-```
-
-**Secrets required (set in GitHub repo → Settings → Secrets):**
-- `DISCORD_PRICE_CHANGE_WEBHOOK_URL` — daily price-change notifications (rename from `DISCORD_WEBHOOK_URL`)
-- `DISCORD_DEADLINE_WEBHOOK_URL` — deadline approaching alert
-- `DISCORD_PREDICT_RECOMMEND_WEBHOOK_URL` — predict + recommend results summary
-- `USER_CONFIG_YAML` — full contents of `user_config.yaml` (required for predict/recommend auto-trigger)
-
-**Migration note:** The existing `DISCORD_WEBHOOK_URL` secret must be renamed to `DISCORD_PRICE_CHANGE_WEBHOOK_URL` in GitHub repo settings, or the price-change step will silently skip.
+`ACTIVE_MODEL` in `src/config.py` controls which model is used. Promotion is automated by `src/pipeline/promote.py` — running `retrain` triggers benchmarking, GitHub Release, and manifest update. If the model file is missing, the pipeline falls back to FPL API `ep_next` values automatically.
 
 ### Running Tests
 
 ```bash
-python -m pytest tests/ -q                          # unit tests only (fast)
-python -m pytest tests/test_integration.py -v       # requires vaastav clone
+python -m pytest tests/ -q                       # all tests
+python -m pytest tests/test_integration.py -v    # requires vaastav clone
 ```
-
----
-
-## Archived Research Code
-
-**DO NOT EXTEND OR USE `_original/` CODE**
-
-The original research notebooks, R optimization layer, and legacy data collection scripts are archived in `_original/` for historical reference only:
-
-- `_original/notebooks/`: 7 Jupyter notebooks with early ML experiments and optimization ideas
-- `_original/optimization/`: 10 R scripts using lpSolve (superseded by Python/PuLP)
-- `_original/data_collection/`: legacy scrapers for FPL, Understat, FBref (not maintained)
-
-**Why archived?** These were proof-of-concept research. The active production system is in `src/pipeline/` (Python, PuLP-based). Any improvements should extend the active pipeline, not the archived code.
-
-**Learn from archives:** See `docs/improvements-roadmap.md` for key learnings and improvement ideas (P1-P5) derived from this research.
 
 ---
 
 ## Data Setup
 
-Both pipelines depend on the **vaastav/Fantasy-Premier-League** dataset:
+The pipeline uses the **vaastav/Fantasy-Premier-League** dataset for historical data (2016–2024). vaastav stopped weekly updates after 2024-25; the pipeline bridges 2025-26 via the live FPL API.
 
 ```bash
 git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Premier-League
 ```
 
-**Note:** vaastav stopped weekly updates after 2024-25. The weekly pipeline patches current-season data directly from the live FPL API (`pre-deadline` and `post-gw` phases).
-
 ---
 
 ## FPL Constraints (optimizer)
 
-- Budget: £100M
-- Squad: 2 GK + 5 DEF + 5 MID + 3 FWD (15 players)
-- XI: 1 GK, 3–5 DEF, 2–5 MID, 1–3 FWD (11 players)
+- Budget: £100M; Squad: 2 GK + 5 DEF + 5 MID + 3 FWD; XI: 1 GK, 3–5 DEF, 2–5 MID, 1–3 FWD
 - Max 3 players from any single club
-- Transfers: Up to 5 free transfers per gameweek (banking allowed, cap 5), -4 points per extra transfer
-- Chips: 2× Wildcard, 2× Freehit, 2× Bench Boost, 2× Triple Captain (split across season halves)
+- Transfers: up to 5 free transfers per GW (banking allowed, cap 5), -4 pts per extra
 
-**Full rules:** See `docs/fpl-rules.md` for complete scoring, BPS, transfer, and chip mechanics.
+**Full rules:** `docs/fpl-rules.md`
 
 ---
 
 ## Gotchas
 
-- **Element ID recycling**: FPL recycles `element` IDs each season. The pipeline uses the `code` field from `players_raw.csv` as the persistent cross-season player identifier. Never group historical GW data by `element` alone — always use `code`.
-- **Stale models**: `rf_model.sav` (original notebooks) has 117 features with old naming (`1_assists` etc). Current pipeline uses 18 features (`assists_roll_4` etc). After cloning, run `retrain` before `predict` or the pipeline falls back to API xP.
-- **models/ is git-ignored**: `.sav` files must be regenerated. After cloning, run `python -m src.pipeline.run retrain --gw <latest>`.
-- **Bootstrap cache**: `data/snapshots/2025-26/gw<N>/bootstrap.json` is used if < 48h old. Delete it to force a fresh API fetch.
-- **FDR column naming**: Despite sounding symmetric, `fdr_team` and `fdr_opp` are NOT interchangeable for xP weighting. `fdr_team` = how hard the fixture is FOR the player's team (spans 1–5, use this). `fdr_opp` = how hard the fixture is for the opponent (reflects the player's own team quality — near-constant 4–5 for elite teams like Arsenal all season, giving no signal). Always use `fdr_team` in `fdr_weight = 1.0 - fdr_sensitivity × (fdr_team − 3) / 2`. See `docs/glossary.md`.
-- **Windows junction for data**: If using git worktrees, `data/Fantasy-Premier-League` is not copied. Create a directory junction: `mklink /J .worktrees/<branch>/data/Fantasy-Premier-League data/Fantasy-Premier-League`.
-
----
-
-## Known Issues
-
-- **R layer archived**: `src/optimization/` R scripts moved to `_original/optimization/`. Do not restore them.
-- **vaastav data gaps**: 2025-26 season data is not in vaastav. The weekly pipeline bridges this via live FPL API patches, but Understat/FBref features are unavailable for the current season.
-- **actual_squad.csv guard**: `post-gw` only writes `actual_squad.csv` when `bootstrap["finished"] == True`. Running `post-gw` mid-GW will skip that file — re-run once the GW completes.
-- **recommended_pts in accuracy_log**: Scores XI starters only with captain 2×. Historical GW31–33 values were backfilled from `optimal_squad.csv` (highest-xP starter as captain) using the FPL live API.
+- **Element ID recycling**: FPL recycles `element` IDs each season. Always use the `code` field as the persistent cross-season player identifier — never group by `element` alone.
+- **models/ is git-ignored**: `.sav` files must be regenerated. After cloning, run `retrain` before `predict`.
+- **Bootstrap cache**: `data/snapshots/2025-26/gw<N>/bootstrap.json` is used if < 48h old. Delete to force a fresh API fetch.
+- **actual_squad.csv guard**: `post-gw` only writes `actual_squad.csv` when `bootstrap["finished"] == True`. Re-run after the GW completes.
+- **recommended_pts in accuracy_log**: Scores XI starters only with captain 2×.
+- **FDR column naming**: `fdr_team` = difficulty FOR the player's team (use this for xP weighting). `fdr_opp` = difficulty for the opponent (near-constant for elite teams, gives no signal). See `docs/glossary.md`.
+- **Windows junction for data**: In git worktrees, `data/Fantasy-Premier-League` is not copied. Create a junction: `mklink /J .worktrees/<branch>/data/Fantasy-Premier-League data/Fantasy-Premier-League`.
 
 ---
 
 ## CI / Bootstrap Pipeline Notes
 
-### Data input for CI predict
-The bootstrap snapshot (`data/snapshots/2025-26/gw{N}/bootstrap.json`) is the data input for CI runs. `phase_predict` uses the ML model (downloaded from GitHub Releases) when available; if vaastav data is absent (no clone in CI) or the model is incompatible, it falls back to `ep_next` from the bootstrap snapshot. **Do not try to clone vaastav or backfill live data in CI** — the ep_next fallback is the intended path.
+The bootstrap snapshot (`data/snapshots/2025-26/gw{N}/bootstrap.json`) is the data input for CI runs. `phase_predict` uses the ML model (downloaded from GitHub Releases) when available; otherwise falls back to `ep_next` from the snapshot. Do not clone vaastav in CI — the ep_next fallback is the intended path.
 
 Key code path (`src/pipeline/run.py::phase_predict`):
-- If `build_merged_dataset` returns empty (no vaastav), skips feature engineering entirely
-- Seeds `latest` directly from bootstrap `ep_next` values
-- Model fallback (`_fallback=True`) then uses those ep_next values as xP
-
-### recommend picks the current GW for user squad
-`phase_recommend` is called with `target_gw` = the upcoming GW (e.g. 32). Picks only exist for completed GWs, so `fetch_user_team_state` must use `get_current_gw(bootstrap)` (e.g. 31), not `target_gw`. Fixed in `src/pipeline/run.py::phase_recommend`.
-
-### Multi-GW recommend squad_after is GW1, not horizon end
-`_recommend_multi_gw` returns `squad_after` = the squad after the **first** GW's transfers (`squad[i][0]`), not the end-of-horizon squad. This is what populates the "My Team After Transfers" Discord block. Fixed in `src/pipeline/recommend.py`.
+- If `build_merged_dataset` returns empty (no vaastav), skips feature engineering
+- Seeds predictions directly from bootstrap `ep_next` values

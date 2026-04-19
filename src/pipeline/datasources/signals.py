@@ -2,7 +2,6 @@
 """Shared signal dataclass and player name resolver."""
 from __future__ import annotations
 from dataclasses import dataclass
-from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
@@ -57,22 +56,10 @@ def log_unresolved_name(
     name: str,
     source: str,
     raw_text: str,
-    csv_path: Path | None = None,
+    csv_path=None,          # kept for backwards-compat; ignored
     timestamp: str = "",
 ) -> None:
-    """Write an unresolved player name to signal_unresolved.csv for manual review."""
-    import pandas as pd
-    from src.config import SIGNAL_UNRESOLVED_CSV
-    resolved_path: Path = Path(csv_path) if csv_path is not None else Path(SIGNAL_UNRESOLVED_CSV)
-    row = pd.DataFrame([{
-        "name": name,
-        "source": source,
-        "raw_text": raw_text,
-        "timestamp": timestamp,
-    }])
-    if resolved_path.exists():
-        row.to_csv(resolved_path, mode="a", header=False, index=False)
-    else:
-        resolved_path.parent.mkdir(parents=True, exist_ok=True)
-        row.to_csv(resolved_path, index=False)
-    logger.debug("Unresolved name '%s' from '%s' logged to %s", name, source, resolved_path)
+    import logging
+    logging.getLogger(__name__).warning(
+        "[%s] Unresolved player: %r — %s", source, name, raw_text[:80]
+    )

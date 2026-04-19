@@ -49,15 +49,12 @@ def test_resolve_unknown_returns_none():
     assert code is None
 
 
-def test_log_unresolved_writes_csv(tmp_path):
+def test_log_unresolved_emits_warning(caplog):
+    import logging
     from src.pipeline.datasources.signals import log_unresolved_name
-    csv_path = tmp_path / "signal_unresolved.csv"
-    log_unresolved_name("Unknown X", source="ffs", raw_text="Unknown X doubt", csv_path=csv_path)
-    import pandas as pd
-    df = pd.read_csv(csv_path)
-    assert len(df) == 1
-    assert df.iloc[0]["name"] == "Unknown X"
-    assert df.iloc[0]["source"] == "ffs"
+    with caplog.at_level(logging.WARNING):
+        log_unresolved_name("Unknown X", source="ffs", raw_text="Unknown X doubt")
+    assert any("Unknown X" in r.message for r in caplog.records)
 
 
 # ── Task 4: FFS tests (append after existing tests) ──────────────────────────
@@ -218,31 +215,26 @@ def test_parse_pi_unresolved_skipped():
     assert len(signals) == 1
 
 
-def test_parse_pi_unresolved_writes_csv(tmp_path):
+def test_parse_pi_unresolved_emits_warning(caplog):
+    import logging
     from src.pipeline.datasources.signals import log_unresolved_name
-    csv_path = tmp_path / "signal_unresolved.csv"
-    log_unresolved_name(
-        name="Unknown Player X", source="premierinjuries",
-        raw_text="Unknown Player X: available.", csv_path=csv_path,
-    )
-    import pandas as pd
-    assert csv_path.exists()
-    df = pd.read_csv(csv_path)
-    assert df.iloc[0]["name"] == "Unknown Player X"
-    assert df.iloc[0]["source"] == "premierinjuries"
+    with caplog.at_level(logging.WARNING):
+        log_unresolved_name(
+            name="Unknown Player X", source="premierinjuries",
+            raw_text="Unknown Player X: available.",
+        )
+    assert any("Unknown Player X" in r.message for r in caplog.records)
 
 
-def test_parse_reddit_unresolved_writes_csv(tmp_path):
+def test_parse_reddit_unresolved_emits_warning(caplog):
+    import logging
     from src.pipeline.datasources.signals import log_unresolved_name
-    csv_path = tmp_path / "signal_unresolved.csv"
-    log_unresolved_name(
-        name="Zxqwertyplayer123", source="reddit",
-        raw_text="Zxqwertyplayer123 doubt for GW32", csv_path=csv_path,
-    )
-    import pandas as pd
-    assert csv_path.exists()
-    df = pd.read_csv(csv_path)
-    assert df.iloc[0]["source"] == "reddit"
+    with caplog.at_level(logging.WARNING):
+        log_unresolved_name(
+            name="Zxqwertyplayer123", source="reddit",
+            raw_text="Zxqwertyplayer123 doubt for GW32",
+        )
+    assert any("reddit" in r.message for r in caplog.records)
 
 
 def test_cross_verify_contradiction_detected():

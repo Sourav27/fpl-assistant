@@ -7,7 +7,16 @@ VAASTAV_DIR = DATA_DIR / "Fantasy-Premier-League"
 RESULTS_DIR = Path("results")
 MODELS_DIR = Path("models")
 PLOTS_DIR = Path("plots")
-SNAPSHOTS_DIR = RESULTS_DIR / "snapshots"
+SNAPSHOTS_DIR = DATA_DIR / "snapshots"
+
+
+def gw_dir(season: str, gw: int) -> Path:
+    return RESULTS_DIR / season / f"gw{gw}"
+
+
+def snapshot_dir(season: str, gw: int) -> Path:
+    return SNAPSHOTS_DIR / season / f"gw{gw}"
+
 
 # Model registry paths (Track I)
 BENCHMARK_PATH      = MODELS_DIR / "benchmark.json"
@@ -16,8 +25,6 @@ CHARTS_DIR          = MODELS_DIR / "charts"
 
 SOURCE_VALIDATION_CSV = RESULTS_DIR / "source_validation.csv"
 SIGNAL_ACCURACY_CSV   = RESULTS_DIR / "signal_accuracy.csv"
-SIGNAL_UNRESOLVED_CSV = RESULTS_DIR / "signal_unresolved.csv"
-
 FPL_API_BASE = "https://fantasy.premierleague.com/api"
 FPL_BOOTSTRAP_URL = f"{FPL_API_BASE}/bootstrap-static/"
 FPL_PLAYER_URL = f"{FPL_API_BASE}/element-summary"  # /{id}/

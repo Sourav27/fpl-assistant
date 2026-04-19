@@ -37,8 +37,9 @@ Four scheduled phases per gameweek:
   Generate xP predictions                   Retrain Random Forest
   Filter player availability                Save rf_model_gw{N}.sav
   Optimize team (PuLP ILP)                  Print MAE vs old model
-  Save xi_gw{N}.csv + squad_gw{N}.csv
-  Save predictions_gw{N}.csv
+  Save results/2025-26/gw{N}/
+    predictions.csv
+    optimal_squad.csv   ← captain = highest xP starter
 ```
 
 **Data layers:**
@@ -76,34 +77,56 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 
 ```bash
 # Phase 1: Before each GW deadline — fetch bootstrap and capture xP snapshot
+#           Writes: data/snapshots/2025-26/gw{N}/bootstrap.json
 python -m src.pipeline.run pre-deadline
 
 # Phase 2: After deadline — generate predictions and optimal team
-#           Also saves results/predictions_gw{N}.csv for the recommend phase
-python -m src.pipeline.run predict --gw 32
+#           Writes: results/2025-26/gw{N}/predictions.csv
+#                   results/2025-26/gw{N}/optimal_squad.csv  (captain = highest xP starter)
+python -m src.pipeline.run predict --gw 34
 
 # Phase 2b: Transfer recommendations (requires user_config.yaml)
-python -m src.pipeline.run recommend --gw 32
-python -m src.pipeline.run recommend --gw 32 --horizon 3    # plan 3 GWs ahead
-python -m src.pipeline.run recommend --gw 32 --wildcard     # wildcard/free-hit mode
-python -m src.pipeline.run recommend --gw 32 --team alt     # use alt team from config
+#            Writes: results/2025-26/gw{N}/recommend.csv
+#                    results/2025-26/gw{N}/recommended_squad.csv
+python -m src.pipeline.run recommend --gw 34
+python -m src.pipeline.run recommend --gw 34 --horizon 3    # plan 3 GWs ahead
+python -m src.pipeline.run recommend --gw 34 --wildcard     # wildcard/free-hit mode
+python -m src.pipeline.run recommend --gw 34 --team alt     # use alt team from config
 
-# Phase 3: After GW completes — collect actual results, print post-match analysis,
-#           update results/accuracy_log.csv (requires user_config.yaml)
+# Phase 3: After GW completes — collect actual results, print post-match analysis
+#           Writes: results/2025-26/gw{N}/actual_squad.csv   (only if GW finished=True)
+#                   results/2025-26/actual_transfers.csv      (appended)
+#                   results/accuracy_log.csv                  (appended)
+#                   results/reports/rank_comparison_gw.png    (regenerated)
+#                   results/reports/rank_comparison_season.png (regenerated)
 python -m src.pipeline.run post-gw
 
 # Phase 4: Retrain model (manual, run when you have enough new data)
-python -m src.pipeline.run retrain --gw 32
+python -m src.pipeline.run retrain --gw 34
 
 # Or run phases 1+2 together
 python -m src.pipeline.run full
+
+# Regenerate performance charts manually at any time
+python scripts/generate_reports.py --from-gw 31
 ```
 
-The `predict` phase prints the optimal XI and saves `results/xi_gw{N}.csv`, `results/squad_gw{N}.csv`, and `results/predictions_gw{N}.csv`.
+**Output files per GW** (`results/2025-26/gw{N}/`):
 
-The `recommend` phase reads `user_config.yaml` (copy from `user_config.example.yaml` and fill in your FPL entry ID) and saves `results/recommend_gw{N}.csv`.
+| File | Written by | Contents |
+|------|-----------|----------|
+| `predictions.csv` | `predict` | xP for all available players |
+| `optimal_squad.csv` | `predict` | 15-player squad; captain = highest xP starter |
+| `recommend.csv` | `recommend` | Transfer plan |
+| `recommended_squad.csv` | `recommend` | Post-transfer squad with captain/VC |
+| `actual_squad.csv` | `post-gw` | Your actual picks + points (GW finished only) |
 
-The `post-gw` phase (when `user_config.yaml` is present) prints a post-match summary comparing your team vs the recommended team vs the dream XI, and appends a row to `results/accuracy_log.csv`.
+**Performance reports** (`results/reports/`):
+
+| File | Description |
+|------|-------------|
+| `rank_comparison_gw.png` | Per-GW bar chart: your pts vs optimal vs recommended, with percentile ranks |
+| `rank_comparison_season.png` | Cumulative season line chart |
 
 ### GW32–38 Calendar
 

@@ -41,12 +41,30 @@ fpl-assistant/
 │       ├── recommend.py         # Multi-GW ILP transfer planner with FDR weighting
 │       ├── analysis.py          # Post-match analysis: prediction misses, dream team, accuracy log
 │       └── run.py               # CLI entry point (6 phases)
-├── tests/                   # pytest unit + integration tests (115 tests)
+├── tests/                   # pytest unit + integration tests (~350 tests)
 ├── scripts/
-│   └── fetch_bootstrap_snapshots.py  # Called by GitHub Actions daily_bootstrap.yml
+│   ├── fetch_bootstrap_snapshots.py  # Called by GitHub Actions daily_bootstrap.yml
+│   └── generate_reports.py           # Generates rank comparison PNGs from accuracy_log.csv
 ├── models/                  # Trained .sav files — git-ignored; regenerate via retrain
-├── results/                 # Output CSVs (xi_gwN.csv, squad_gwN.csv, predictions_gwN.csv,
-│                            #              recommend_gwN.csv, accuracy_log.csv, snapshots/)
+├── data/
+│   ├── Fantasy-Premier-League/       # vaastav dataset — clone separately (see Data Setup)
+│   └── snapshots/
+│       └── 2025-26/
+│           └── gw{N}/
+│               └── bootstrap.json    # Per-GW bootstrap snapshot (moved from results/snapshots/)
+├── results/
+│   ├── accuracy_log.csv              # GW-by-GW performance log (your pts, recommended pts, xP, rank)
+│   ├── 2025-26/
+│   │   ├── actual_transfers.csv      # All actual transfers made across GWs
+│   │   └── gw{N}/
+│   │       ├── predictions.csv       # Model xP predictions for all players
+│   │       ├── optimal_squad.csv     # Full 15-player squad with captain/VC, is_starter, bench_order
+│   │       ├── recommended_squad.csv # Post-transfer squad (after recommend phase)
+│   │       ├── recommend.csv         # Transfer plan output
+│   │       └── actual_squad.csv      # Actual squad played (written by post-gw, only if GW finished)
+│   └── reports/
+│       ├── rank_comparison_gw.png    # Per-GW bar chart: your pts vs optimal vs recommended
+│       └── rank_comparison_season.png # Cumulative season line chart
 ├── logs/                    # Local run output — git-ignored
 ├── user_config.example.yaml # Template — copy to user_config.yaml and fill in entry_id
 ├── user_config.yaml         # User team IDs & preferences (git-ignored, required for recommend/post-gw analysis)
@@ -67,18 +85,28 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 
 ```bash
 # Phase 1 — before GW deadline: fetch bootstrap, save xP snapshot
+#            Writes: data/snapshots/2025-26/gw{N}/bootstrap.json
 python -m src.pipeline.run pre-deadline
 
-# Phase 2 — generate team selection (also saves results/predictions_gw{N}.csv)
+# Phase 2 — generate team selection
+#            Writes: results/2025-26/gw{N}/predictions.csv
+#                    results/2025-26/gw{N}/optimal_squad.csv  (captain = highest xP starter)
 python -m src.pipeline.run predict --gw <N>
 
-# Phase 2b — transfer recommendations (requires user_config.yaml + predictions_gw{N}.csv)
+# Phase 2b — transfer recommendations (requires user_config.yaml + predictions.csv)
+#             Writes: results/2025-26/gw{N}/recommend.csv
+#                     results/2025-26/gw{N}/recommended_squad.csv
 python -m src.pipeline.run recommend --gw <N>
 python -m src.pipeline.run recommend --gw <N> --horizon 3          # plan 3 GWs ahead
 python -m src.pipeline.run recommend --gw <N> --wildcard           # unconstrained rebuild
 python -m src.pipeline.run recommend --gw <N> --team alt           # use alt team from config
 
 # Phase 3 — after GW ends: collect live results + post-match analysis
+#            Writes: results/2025-26/gw{N}/actual_squad.csv  (only if bootstrap finished=True)
+#                    results/2025-26/actual_transfers.csv     (appended)
+#                    results/accuracy_log.csv                 (appended)
+#                    results/reports/rank_comparison_gw.png   (regenerated)
+#                    results/reports/rank_comparison_season.png (regenerated)
 python -m src.pipeline.run post-gw
 
 # Phase 4 — retrain model on expanded data
@@ -86,6 +114,9 @@ python -m src.pipeline.run retrain --gw <N>
 
 # Or run phases 1+2 together
 python -m src.pipeline.run full
+
+# Regenerate performance charts at any time (e.g. after editing accuracy_log.csv)
+python scripts/generate_reports.py --from-gw 31
 ```
 
 **`recommend` flags:**
@@ -202,7 +233,7 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 - **Element ID recycling**: FPL recycles `element` IDs each season. The pipeline uses the `code` field from `players_raw.csv` as the persistent cross-season player identifier. Never group historical GW data by `element` alone — always use `code`.
 - **Stale models**: `rf_model.sav` (original notebooks) has 117 features with old naming (`1_assists` etc). Current pipeline uses 18 features (`assists_roll_4` etc). After cloning, run `retrain` before `predict` or the pipeline falls back to API xP.
 - **models/ is git-ignored**: `.sav` files must be regenerated. After cloning, run `python -m src.pipeline.run retrain --gw <latest>`.
-- **Bootstrap cache**: `results/snapshots/bootstrap_gw<N>.json` is used if < 48h old. Delete it to force a fresh API fetch.
+- **Bootstrap cache**: `data/snapshots/2025-26/gw<N>/bootstrap.json` is used if < 48h old. Delete it to force a fresh API fetch.
 - **FDR column naming**: Despite sounding symmetric, `fdr_team` and `fdr_opp` are NOT interchangeable for xP weighting. `fdr_team` = how hard the fixture is FOR the player's team (spans 1–5, use this). `fdr_opp` = how hard the fixture is for the opponent (reflects the player's own team quality — near-constant 4–5 for elite teams like Arsenal all season, giving no signal). Always use `fdr_team` in `fdr_weight = 1.0 - fdr_sensitivity × (fdr_team − 3) / 2`. See `docs/glossary.md`.
 - **Windows junction for data**: If using git worktrees, `data/Fantasy-Premier-League` is not copied. Create a directory junction: `mklink /J .worktrees/<branch>/data/Fantasy-Premier-League data/Fantasy-Premier-League`.
 
@@ -212,13 +243,15 @@ git clone https://github.com/vaastav/Fantasy-Premier-League.git data/Fantasy-Pre
 
 - **R layer archived**: `src/optimization/` R scripts moved to `_original/optimization/`. Do not restore them.
 - **vaastav data gaps**: 2025-26 season data is not in vaastav. The weekly pipeline bridges this via live FPL API patches, but Understat/FBref features are unavailable for the current season.
+- **actual_squad.csv guard**: `post-gw` only writes `actual_squad.csv` when `bootstrap["finished"] == True`. Running `post-gw` mid-GW will skip that file — re-run once the GW completes.
+- **recommended_pts in accuracy_log**: Scores XI starters only with captain 2×. Historical GW31–33 values were backfilled from `optimal_squad.csv` (highest-xP starter as captain) using the FPL live API.
 
 ---
 
 ## CI / Bootstrap Pipeline Notes
 
 ### Data input for CI predict
-The bootstrap snapshot (`results/snapshots/bootstrap_gw{N}.json`) is the data input for CI runs. `phase_predict` uses the ML model (downloaded from GitHub Releases) when available; if vaastav data is absent (no clone in CI) or the model is incompatible, it falls back to `ep_next` from the bootstrap snapshot. **Do not try to clone vaastav or backfill live data in CI** — the ep_next fallback is the intended path.
+The bootstrap snapshot (`data/snapshots/2025-26/gw{N}/bootstrap.json`) is the data input for CI runs. `phase_predict` uses the ML model (downloaded from GitHub Releases) when available; if vaastav data is absent (no clone in CI) or the model is incompatible, it falls back to `ep_next` from the bootstrap snapshot. **Do not try to clone vaastav or backfill live data in CI** — the ep_next fallback is the intended path.
 
 Key code path (`src/pipeline/run.py::phase_predict`):
 - If `build_merged_dataset` returns empty (no vaastav), skips feature engineering entirely

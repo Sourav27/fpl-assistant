@@ -1,0 +1,16 @@
+element,name,position,team,xP,is_starter,bench_order,is_captain,is_vice_captain,now_cost
+470,Dúbravka,GKP,Burnley,2.83,True,,False,False,4.0
+317,Andersen,DEF,Fulham,1.57,True,,False,False,4.5
+83,O.Dango,MID,Brentford,1.68,True,,False,False,5.9
+450,Cunha,MID,Man Utd,3.91,True,,False,True,8.0
+449,B.Fernandes,MID,Man Utd,5.36,True,,True,False,10.3
+329,Wilson,MID,Fulham,3.03,True,,False,False,6.0
+547,E.Le Fée,MID,Sunderland,2.58,True,,False,False,4.9
+1,Raya,GKP,Arsenal,2.71,True,,False,False,6.0
+430,Haaland,FWD,Man City,1.98,True,,False,False,14.5
+261,Richards,DEF,Crystal Palace,2.1,True,,False,False,44.0
+723,Canvot,DEF,Crystal Palace,1.77,True,,False,False,45.0
+6,Saliba,DEF,Arsenal,1.4,False,1,False,False,61.0
+136,Thiago,FWD,Brentford,0.68,False,2,False,False,7.3
+5,Gabriel,DEF,Arsenal,0.12,False,3,False,False,7.1
+661,Ekitiké,FWD,Liverpool,0.0,False,4,False,False,9.2

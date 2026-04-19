@@ -75,6 +75,12 @@ jobs:
           echo "Running post-gw analysis for GW${GW}..."
           python -m src.pipeline.run post-gw
 
+      - name: Generate performance reports
+        if: |
+          steps.gw_check.outputs.gw_finished == 'true' &&
+          steps.postgw_config.outputs.config_available == 'true'
+        run: python scripts/generate_reports.py --from-gw 31
+
       - name: Commit accuracy log update
         if: |
           steps.gw_check.outputs.gw_finished == 'true' &&
@@ -82,7 +88,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add results/accuracy_log.csv || true
+          git add results/accuracy_log.csv results/reports/ || true
           if git diff --cached --quiet; then
             echo "No accuracy log changes to commit."
           else

@@ -665,6 +665,15 @@ def phase_post_gw():
     )
     print(f"[post-gw] Accuracy log updated: {log_path}")
 
+    try:
+        import subprocess
+        subprocess.run(
+            ["python", "scripts/generate_reports.py", "--from-gw", "31"],
+            check=True
+        )
+    except Exception as e:
+        logger.warning(f"generate_reports failed (non-fatal): {e}")
+
 
 def _is_wildcard_mode(user_state, wildcard_flag: bool) -> bool:
     """Return True only when --wildcard flag is explicitly passed. Active chip auto-detection

@@ -103,8 +103,9 @@ class TestPhasePredict:
             # Will warn about missing model, use fallback
             result = phase_predict(target_gw=10)
 
-        assert (results_dir / "xi_gw10.csv").exists()
-        assert (results_dir / "squad_gw10.csv").exists()
+        out_dir = results_dir / "2025-26" / "gw10"
+        assert (out_dir / "xi.csv").exists()
+        assert (out_dir / "optimal_squad.csv").exists()
 
 
 class TestPhaseRetrain:

@@ -21,7 +21,7 @@ import pandas as pd
 from src.config import (
     VAASTAV_DIR, RESULTS_DIR, MODELS_DIR, CURRENT_SEASON,
     ACTIVE_MODEL, ACTIVE_MODELS, BOOTSTRAP_MAX_AGE_HOURS, SNAPSHOTS_DIR,
-    FPL_ENTRY_URL, load_user_config, UserConfigError,
+    FPL_ENTRY_URL, load_user_config, UserConfigError, gw_dir,
 )
 from src.pipeline.fetch import (
     fetch_bootstrap, get_current_gw, get_next_deadline,
@@ -45,6 +45,27 @@ from src.pipeline.availability import filter_availability
 from src.pipeline.optimize import optimize_team
 
 logger = logging.getLogger(__name__)
+
+
+def _build_squad_csv(result: dict) -> pd.DataFrame:
+    xi = result["xi"].copy()
+    xi["is_starter"] = True
+    xi["bench_order"] = pd.NA
+
+    bench = result["bench"].copy().sort_values("xP", ascending=False).reset_index(drop=True)
+    bench["is_starter"] = False
+    bench["bench_order"] = range(1, len(bench) + 1)
+
+    df = pd.concat([xi, bench], ignore_index=True)
+    cap_el = result["captain"]["element"]
+    vc_el = result["vice_captain"]["element"]
+    df["is_captain"] = pd.array([bool(v == cap_el) for v in df["element"]], dtype=object)
+    df["is_vice_captain"] = pd.array([bool(v == vc_el) for v in df["element"]], dtype=object)
+
+    cols = ["element", "name", "position", "team", "xP",
+            "is_starter", "bench_order", "is_captain", "is_vice_captain", "now_cost"]
+    return df[[c for c in cols if c in df.columns]]
+
 
 # Daily CI refresh runs at 07:06 IST (01:36 UTC). A bootstrap snapshot is
 # considered fresh if it was saved after the most recent 07:06 IST cutoff.
@@ -387,8 +408,15 @@ def phase_predict(target_gw: int | None = None):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     gw_label = f"gw{target_gw}" if target_gw else "latest"
 
+    # Determine per-GW output directory
+    if target_gw:
+        out_dir = RESULTS_DIR / CURRENT_SEASON / f"gw{target_gw}"
+    else:
+        out_dir = RESULTS_DIR / "latest"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     # Save full predictions for recommend + analysis phases
-    pred_path = RESULTS_DIR / f"predictions_{gw_label}.csv"
+    pred_path = out_dir / "predictions.csv"
     save_full_predictions(predictions, pred_path)
     print(f"[predict] Saved full predictions ({len(predictions)} players) to {pred_path}")
 
@@ -397,13 +425,13 @@ def phase_predict(target_gw: int | None = None):
     except Exception as e:
         logger.warning(f"optimize_team failed (likely infeasible LP — small player pool): {e}")
         empty = pd.DataFrame(columns=["element", "name", "position", "team", "xP", "now_cost"])
-        empty.to_csv(RESULTS_DIR / f"xi_{gw_label}.csv", index=False)
-        empty.to_csv(RESULTS_DIR / f"squad_{gw_label}.csv", index=False)
+        empty.to_csv(out_dir / "xi.csv", index=False)
+        empty.to_csv(out_dir / "optimal_squad.csv", index=False)
         print(f"[predict] Optimization infeasible — saved empty CSVs for {gw_label}")
         return {"xi": empty, "squad": empty, "captain": None, "vice_captain": None, "total_xp": 0.0}
 
-    result["xi"].to_csv(RESULTS_DIR / f"xi_{gw_label}.csv", index=False)
-    result["squad"].to_csv(RESULTS_DIR / f"squad_{gw_label}.csv", index=False)
+    result["xi"].to_csv(out_dir / "xi.csv", index=False)
+    _build_squad_csv(result).to_csv(out_dir / "optimal_squad.csv", index=False)
 
     print(f"\n{'='*50}")
     print(f"OPTIMAL XI for GW{target_gw or '?'}:")
@@ -443,9 +471,9 @@ def phase_post_gw():
     live_df = fetch_live_gw_data(target_gw=gw, bootstrap_data=bootstrap)
 
     if not live_df.empty:
-        gw_dir = VAASTAV_DIR / "data" / CURRENT_SEASON / "gws"
-        gw_dir.mkdir(parents=True, exist_ok=True)
-        live_path = gw_dir / f"gw{gw}_live.csv"
+        live_gw_dir = VAASTAV_DIR / "data" / CURRENT_SEASON / "gws"
+        live_gw_dir.mkdir(parents=True, exist_ok=True)
+        live_path = live_gw_dir / f"gw{gw}_live.csv"
         live_df.to_csv(live_path, index=False)
         print(f"[post-gw] Saved {len(live_df)} player rows to {live_path}")
     else:
@@ -464,7 +492,8 @@ def phase_post_gw():
 
     # Load predictions for this GW
     gw_label = f"gw{gw}"
-    pred_path = RESULTS_DIR / f"predictions_{gw_label}.csv"
+    _post_gw_dir = RESULTS_DIR / CURRENT_SEASON / f"gw{gw}"
+    pred_path = _post_gw_dir / "predictions.csv"
     if not pred_path.exists():
         print(f"[post-gw] Predictions file {pred_path} not found — skipping analysis")
         return
@@ -496,7 +525,7 @@ def phase_post_gw():
     # Recommended team comparison — use saved squad CSV for accuracy
     recommended_pts = None
     recommended_xp = None
-    squad_rec_path = RESULTS_DIR / f"squad_recommend_{gw_label}.csv"
+    squad_rec_path = _post_gw_dir / "squad_recommend.csv"
     if squad_rec_path.exists() and not live_df.empty:
         rec_squad_df = pd.read_csv(squad_rec_path)
         actual_map_rec = live_df.set_index("element")["total_points"].to_dict()
@@ -555,7 +584,7 @@ def phase_post_gw():
     # Intentionally the full squad (not just XI) so it reflects bench-boost potential.
     wildcard_pts = None
     wildcard_xp = None
-    squad_path = RESULTS_DIR / f"squad_{gw_label}.csv"
+    squad_path = _post_gw_dir / "optimal_squad.csv"
     if squad_path.exists() and not live_df.empty:
         squad_df = pd.read_csv(squad_path)
         actual_map_wc = live_df.set_index("element")["total_points"].to_dict()
@@ -605,7 +634,11 @@ def phase_recommend(
 
     # Load predictions
     gw_label = f"gw{target_gw}" if target_gw else "latest"
-    pred_path = RESULTS_DIR / f"predictions_{gw_label}.csv"
+    if target_gw:
+        _rec_out_dir = RESULTS_DIR / CURRENT_SEASON / f"gw{target_gw}"
+    else:
+        _rec_out_dir = RESULTS_DIR / "latest"
+    pred_path = _rec_out_dir / "predictions.csv"
     if not pred_path.exists():
         print(f"[recommend] ERROR: Predictions not found at {pred_path}. Run 'predict' first.")
         return None
@@ -680,7 +713,7 @@ def phase_recommend(
     print(f"Bank after: £{plan.get('bank_after', 0):.1f}m")
 
     # Save CSV
-    out_path = RESULTS_DIR / f"recommend_{gw_label}.csv"
+    out_path = _rec_out_dir / "recommend.csv"
     save_recommend_csv(plan, out_path, start_gw=target_gw or 0)
     print(f"\nSaved to {out_path}")
 
@@ -702,10 +735,10 @@ def phase_recommend(
             if t.get("hit_cost", 0) == 0
         )
         squad_rec["free_transfers_after"] = max(1, user_state.free_transfers - free_used)
-        squad_rec_path = RESULTS_DIR / f"squad_recommend_{gw_label}.csv"
+        squad_rec_path = _rec_out_dir / "squad_recommend.csv"
         squad_rec.to_csv(squad_rec_path, index=False)
         xi_rec = select_xi(squad_rec)
-        xi_rec_path = RESULTS_DIR / f"xi_recommend_{gw_label}.csv"
+        xi_rec_path = _rec_out_dir / "xi_recommend.csv"
         xi_rec.to_csv(xi_rec_path, index=False)
         print(f"Saved post-transfer squad to {squad_rec_path}")
         print(f"Saved post-transfer XI to {xi_rec_path}")

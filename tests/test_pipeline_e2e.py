@@ -173,45 +173,54 @@ class TestPipelineE2E:
         assert set(xp_df.columns) >= {"id", "xP"}
         assert len(xp_df) == 15
 
-    def test_predict_ep_next_fallback_writes_xi_and_squad(self, tmp_path, e2e_bootstrap):
-        """Phase 2 (ep_next fallback, no vaastav) must write xi_gw{N}.csv and squad_gw{N}.csv."""
-        result, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+    def _gw31_dir(self, results_dir):
+        return results_dir / "2025-26" / "gw31"
 
-        assert (results_dir / "xi_gw31.csv").exists(), "xi_gw31.csv not written"
-        assert (results_dir / "squad_gw31.csv").exists(), "squad_gw31.csv not written"
+    def test_predict_ep_next_fallback_writes_xi_and_squad(self, tmp_path, e2e_bootstrap):
+        """Phase 2 (ep_next fallback, no vaastav) must write xi.csv and optimal_squad.csv."""
+        result, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
+
+        assert (gw31 / "xi.csv").exists(), "xi.csv not written"
+        assert (gw31 / "optimal_squad.csv").exists(), "optimal_squad.csv not written"
 
     def test_predict_ep_next_fallback_writes_predictions(self, tmp_path, e2e_bootstrap):
-        """Phase 2 must write predictions_gw{N}.csv (input for recommend phase)."""
+        """Phase 2 must write predictions.csv (input for recommend phase)."""
         _, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        assert (results_dir / "predictions_gw31.csv").exists(), "predictions_gw31.csv not written"
+        assert (gw31 / "predictions.csv").exists(), "predictions.csv not written"
 
     def test_predict_squad_has_15_players(self, tmp_path, e2e_bootstrap):
         """The selected squad must always contain exactly 15 players."""
         result, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        squad = pd.read_csv(results_dir / "squad_gw31.csv")
+        squad = pd.read_csv(gw31 / "optimal_squad.csv")
         assert len(squad) == 15, f"Expected 15-player squad, got {len(squad)}"
 
     def test_predict_xi_has_11_players(self, tmp_path, e2e_bootstrap):
         """The starting XI must always contain exactly 11 players."""
         result, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        xi = pd.read_csv(results_dir / "xi_gw31.csv")
+        xi = pd.read_csv(gw31 / "xi.csv")
         assert len(xi) == 11, f"Expected 11-player XI, got {len(xi)}"
 
     def test_predict_xi_has_exactly_one_gk(self, tmp_path, e2e_bootstrap):
         """Starting XI must contain exactly 1 GK."""
         result, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        xi = pd.read_csv(results_dir / "xi_gw31.csv")
+        xi = pd.read_csv(gw31 / "xi.csv")
         assert (xi["position"] == "GK").sum() == 1
 
     def test_predict_xi_valid_formation(self, tmp_path, e2e_bootstrap):
         """XI must satisfy FPL formation rules: 1 GK, 3-5 DEF, 2-5 MID, 1-3 FWD."""
         result, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        xi = pd.read_csv(results_dir / "xi_gw31.csv")
+        xi = pd.read_csv(gw31 / "xi.csv")
         pos = xi["position"].value_counts()
         assert pos.get("GK", 0) == 1
         assert 3 <= pos.get("DEF", 0) <= 5
@@ -221,26 +230,29 @@ class TestPipelineE2E:
     def test_predict_max_3_from_same_club(self, tmp_path, e2e_bootstrap):
         """Squad must not contain more than 3 players from any single club."""
         result, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        squad = pd.read_csv(results_dir / "squad_gw31.csv")
+        squad = pd.read_csv(gw31 / "optimal_squad.csv")
         max_per_team = squad["team"].value_counts().max()
         assert max_per_team <= 3, f"Club limit violated: max {max_per_team} from one club"
 
     def test_predict_snapshot_read_from_phase1_output(self, tmp_path, e2e_bootstrap):
         """Phase 2 must use the snapshot written by phase 1 (tests phase chaining)."""
         result, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
         # If phase chaining is broken (phase 2 can't find snapshot), it either
         # fails or writes an empty squad. A non-empty squad proves the snapshot
         # written by phase 1 was successfully consumed by phase 2.
-        squad = pd.read_csv(results_dir / "squad_gw31.csv")
+        squad = pd.read_csv(gw31 / "optimal_squad.csv")
         assert len(squad) > 0, "Empty squad — phase 2 likely failed to read phase 1 snapshot"
 
     def test_full_pipeline_budget_constraint(self, tmp_path, e2e_bootstrap):
         """Selected squad must cost ≤ £100M (1000 in FPL tenths)."""
         result, results_dir = self._run_full(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        squad = pd.read_csv(results_dir / "squad_gw31.csv")
+        squad = pd.read_csv(gw31 / "optimal_squad.csv")
         total_cost = squad["now_cost"].sum()
         assert total_cost <= 1000, f"Budget exceeded: {total_cost / 10:.1f}M > 100M"
 
@@ -293,20 +305,25 @@ class TestPartialManifestFallback:
 
         return results_dir
 
+    def _gw31_dir(self, results_dir):
+        return results_dir / "2025-26" / "gw31"
+
     def test_partial_manifest_still_produces_full_squad(self, tmp_path, e2e_bootstrap):
         """When only MID model is in manifest, fallback must fill GK/DEF/FWD from ep_next."""
         results_dir = self._run_predict_with_mid_only_model(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        squad = pd.read_csv(results_dir / "squad_gw31.csv")
+        squad = pd.read_csv(gw31 / "optimal_squad.csv")
         assert len(squad) == 15, (
             f"Partial manifest fallback must produce 15-player squad, got {len(squad)}"
         )
 
     def test_partial_manifest_predictions_has_all_positions(self, tmp_path, e2e_bootstrap):
-        """predictions_gw31.csv must include GK/DEF/MID/FWD even if only MID model exists."""
+        """predictions.csv must include GK/DEF/MID/FWD even if only MID model exists."""
         results_dir = self._run_predict_with_mid_only_model(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        preds = pd.read_csv(results_dir / "predictions_gw31.csv")
+        preds = pd.read_csv(gw31 / "predictions.csv")
         assert len(preds) > 0, "Predictions must not be empty when partial manifest is used"
         positions_present = set(preds["position"].unique())
         assert positions_present >= {"GK", "DEF", "MID", "FWD"}, (
@@ -316,8 +333,9 @@ class TestPartialManifestFallback:
     def test_partial_manifest_xi_valid(self, tmp_path, e2e_bootstrap):
         """XI must be valid even when only one position model exists."""
         results_dir = self._run_predict_with_mid_only_model(tmp_path, e2e_bootstrap)
+        gw31 = self._gw31_dir(results_dir)
 
-        xi = pd.read_csv(results_dir / "xi_gw31.csv")
+        xi = pd.read_csv(gw31 / "xi.csv")
         assert len(xi) == 11, f"XI must have 11 players, got {len(xi)}"
         assert (xi["position"] == "GK").sum() == 1
 
@@ -338,8 +356,10 @@ class TestRecommendEmptyPredictions:
         results_dir = tmp_path / "results"
         results_dir.mkdir()
 
-        # Write an empty predictions CSV (headers only)
-        (results_dir / "predictions_gw33.csv").write_text(
+        # Write an empty predictions CSV (headers only) at the new gw_dir path
+        gw33_dir = results_dir / "2025-26" / "gw33"
+        gw33_dir.mkdir(parents=True, exist_ok=True)
+        (gw33_dir / "predictions.csv").write_text(
             "element,code,name,position,team,xP,now_cost\n"
         )
 
@@ -415,9 +435,11 @@ class TestPostGwDiscord:
         } for p in players]
         df = pd.DataFrame(rows)
 
-        df.to_csv(results / "predictions_gw31.csv", index=False)
-        df.to_csv(results / "squad_gw31.csv", index=False)
-        df.head(15).to_csv(results / "squad_recommend_gw31.csv", index=False)
+        gw31 = results / "2025-26" / "gw31"
+        gw31.mkdir(parents=True, exist_ok=True)
+        df.to_csv(gw31 / "predictions.csv", index=False)
+        df.to_csv(gw31 / "optimal_squad.csv", index=False)
+        df.head(15).to_csv(gw31 / "squad_recommend.csv", index=False)
         return results
 
     def test_post_gw_accuracy_log_has_spearman_rho(self, tmp_path, e2e_bootstrap):

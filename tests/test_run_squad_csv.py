@@ -119,6 +119,21 @@ def test_recommended_pts_returns_none_when_file_missing(tmp_path):
     assert pts is None
 
 
+def test_wildcard_pts_uses_starters_only_with_captain_multiplier(tmp_path):
+    """wildcard_pts must use same logic as recommended_pts: starters only, captain 2×."""
+    from src.pipeline.run import _score_recommended_squad
+    # optimal_squad.csv has same schema as recommended_squad.csv
+    opt_path = _make_recommended_squad_csv(tmp_path)
+    # rename so it reads as optimal_squad.csv (same function, different caller)
+    import shutil
+    opt_squad = tmp_path / "optimal_squad.csv"
+    shutil.copy(opt_path, opt_squad)
+    live_map = {1: 10, 2: 8, 3: 99}  # bench player excluded
+    pts = _score_recommended_squad(opt_squad, live_map)
+    # Salah (captain): 10 × 2 = 20; Saka: 8; Flekken excluded
+    assert pts == 28
+
+
 def test_post_gw_skips_actual_squad_when_gw_not_finished():
     """phase_post_gw must not write actual_squad.csv if bootstrap says finished=False."""
     from src.pipeline.run import _gw_is_finished

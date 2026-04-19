@@ -668,17 +668,17 @@ def phase_post_gw():
         your_percentile_rank=your_percentile_rank, misses=misses,
     ))
 
-    # Wildcard baseline: full 15-player optimizer squad summed against live data.
-    # Intentionally the full squad (not just XI) so it reflects bench-boost potential.
+    # Wildcard baseline: optimal squad XI only, captain 2× — comparable to your_pts/recommended_pts.
     wildcard_pts = None
     wildcard_xp = None
     squad_path = _post_gw_dir / "optimal_squad.csv"
-    if squad_path.exists() and not live_df.empty:
-        squad_df = pd.read_csv(squad_path)
+    if not live_df.empty:
         actual_map_wc = live_df.set_index("element")["total_points"].to_dict()
-        squad_df["actual_points"] = squad_df["element"].map(actual_map_wc).fillna(0)
-        wildcard_pts = int(squad_df["actual_points"].sum())
-        wildcard_xp = float(squad_df["xP"].sum()) if "xP" in squad_df.columns else None
+        wildcard_pts = _score_recommended_squad(squad_path, actual_map_wc)
+        if squad_path.exists():
+            squad_df = pd.read_csv(squad_path)
+            starters_wc = squad_df[squad_df["is_starter"] == True]
+            wildcard_xp = float(starters_wc["xP"].sum()) if "xP" in starters_wc.columns else None
 
     # Write accuracy log
     log_path = RESULTS_DIR / "accuracy_log.csv"

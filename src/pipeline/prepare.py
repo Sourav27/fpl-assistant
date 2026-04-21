@@ -221,7 +221,7 @@ def compute_points_with_dc(df: pd.DataFrame) -> pd.DataFrame:
     GK rows are never modified.
     """
     df = df.copy()
-    dc_available = all(c in df.columns for c in _DC_COLS_DEF)
+    dc_available = all(c in df.columns for c in _DC_COLS_MID_FWD)
     if not dc_available:
         df["points_with_DC"] = df["total_points"]
         return df

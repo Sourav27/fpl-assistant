@@ -139,6 +139,22 @@ def predict_next_gw_per_position(
                 pos_df = pos_df.copy()
                 pos_df["xP"] = xp
                 pos_df["_fallback"] = False
+                # Add SHAP reasons (only when model predicted successfully)
+                try:
+                    cohort_X = pos_df[available_features].fillna(0)
+                    pos_df["shap_reason"] = compute_shap_reasons(
+                        model, X, available_features, top_n=5, cohort_X=cohort_X
+                    )
+                    if "opponent_team" in pos_df.columns:
+                        pos_df["_shap_fixture_label"] = (
+                            "vs " + pos_df["opponent_team"].astype(str) + ": " + pos_df["shap_reason"]
+                        )
+                    else:
+                        pos_df["_shap_fixture_label"] = pos_df["shap_reason"]
+                except Exception as exc:
+                    logger.warning(f"[predict] SHAP failed for {pos}: {exc}")
+                    pos_df["shap_reason"] = ""
+                    pos_df["_shap_fixture_label"] = ""
             except Exception as exc:
                 # Handles sklearn version mismatches (e.g. model trained on 1.7, running 1.8)
                 logger.warning(
@@ -149,6 +165,8 @@ def predict_next_gw_per_position(
                 else:
                     pos_df["xP"] = 0.0
                 pos_df["_fallback"] = True
+                pos_df["shap_reason"] = ""
+                pos_df["_shap_fixture_label"] = ""
         else:
             # Fallback: use ep_next if provided, else 0
             if ep_next_map:
@@ -156,6 +174,8 @@ def predict_next_gw_per_position(
             else:
                 pos_df["xP"] = 0.0
             pos_df["_fallback"] = True
+            pos_df["shap_reason"] = ""
+            pos_df["_shap_fixture_label"] = ""
 
         predictions.append(pos_df)
 
@@ -172,6 +192,7 @@ def predict_next_gw_per_position(
         "team": "first",
         "position": "first",
         "name": "first",
+        "_shap_fixture_label": lambda s: "; ".join(s),
     }
     if "code" in combined.columns:
         agg_cols["code"] = "first"
@@ -180,6 +201,10 @@ def predict_next_gw_per_position(
 
     group_key = "element"
     result = combined.groupby(group_key, as_index=False).agg(agg_cols)
+    result = result.rename(columns={"_shap_fixture_label": "shap_reason"})
+    # Ensure shap_reason is never NaN
+    if "shap_reason" in result.columns:
+        result["shap_reason"] = result["shap_reason"].fillna("")
     return result
 
 

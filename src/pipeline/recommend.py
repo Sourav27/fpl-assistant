@@ -193,6 +193,7 @@ def _recommend_single_gw(
             "price_in": p_in["now_cost"] / 10,  # convert to £ for display
             "xp_out": p_out["xP"],
             "xp_in": p_in["xP"],
+            "shap_reason": p_in.get("shap_reason", "") if hasattr(p_in, "get") else getattr(p_in, "shap_reason", ""),
         })
 
     squad_after = [players.iloc[i]["element"] for i in selected]
@@ -394,6 +395,7 @@ def _recommend_multi_gw(
                 "price_in": p_in["now_cost"] / 10,  # convert to £ for display
                 "xp_out": p_out["xP"],
                 "xp_in": p_in["xP"],
+                "shap_reason": p_in.get("shap_reason", "") if hasattr(p_in, "get") else getattr(p_in, "shap_reason", ""),
             })
         gw_results.append({
             "transfers": transfers_gw,

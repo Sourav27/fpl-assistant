@@ -221,22 +221,17 @@ def compute_points_with_dc(df: pd.DataFrame) -> pd.DataFrame:
     GK rows are never modified.
     """
     df = df.copy()
-    dc_available = all(c in df.columns for c in _DC_COLS_MID_FWD)
-    if not dc_available:
-        df["points_with_DC"] = df["total_points"]
-        return df
-
     df["points_with_DC"] = df["total_points"].copy()
+
     for pos, threshold in _DC_THRESHOLD.items():
-        cols = _DC_COLS_DEF if pos == "DEF" else _DC_COLS_MID_FWD
-        available_cols = [c for c in cols if c in df.columns]
+        required_cols = _DC_COLS_DEF if pos == "DEF" else _DC_COLS_MID_FWD
+        if not all(c in df.columns for c in required_cols):
+            continue  # skip position if required DC columns absent
         mask = df["position"] == pos
-        dc_sum = df.loc[mask, available_cols].fillna(0).sum(axis=1)
+        dc_sum = df.loc[mask, required_cols].fillna(0).sum(axis=1)
         bonus = (dc_sum >= threshold).astype(int) * 2
         df.loc[mask, "points_with_DC"] = df.loc[mask, "total_points"] + bonus
 
-    # GK and any unhandled positions: no change
-    df["points_with_DC"] = df["points_with_DC"].fillna(df["total_points"])
     return df
 
 

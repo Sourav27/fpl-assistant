@@ -40,6 +40,25 @@ def test_gk_unaffected():
     assert df.loc[df["code"] == 4, "points_with_DC"].iloc[0] == 2  # unchanged
 
 
+def test_def_dc_threshold_at_boundary():
+    """DEF with dc_sum exactly == 10 should receive +2."""
+    df = _make_player_df()
+    df.loc[df["position"] == "DEF", ["clearances", "blocked_shots", "interceptions", "tackles"]] = [7, 2, 0, 1]
+    result = compute_points_with_dc(df)
+    assert result.loc[result["code"] == 1, "points_with_DC"].iloc[0] == 8  # 6 + 2
+
+
+def test_partial_dc_cols_def_still_computed():
+    """If recoveries is missing but DEF cols present, DEF DC is still computed."""
+    df = _make_player_df().drop(columns=["recoveries"])
+    result = compute_points_with_dc(df)
+    # DEF row should still get +2 (doesn't use recoveries)
+    assert result.loc[result["code"] == 1, "points_with_DC"].iloc[0] == 8
+    # MID/FWD rows skip (recoveries required) — fall back to total_points
+    assert result.loc[result["code"] == 2, "points_with_DC"].iloc[0] == 4
+    assert result.loc[result["code"] == 3, "points_with_DC"].iloc[0] == 8
+
+
 def test_nan_dc_falls_back_to_total_points():
     """Rows without FBref data (no DC columns) must fall back to total_points."""
     df = _make_player_df().drop(columns=["clearances", "blocked_shots",

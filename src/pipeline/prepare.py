@@ -208,6 +208,61 @@ def add_opponent_xg_stats(merged: pd.DataFrame) -> pd.DataFrame:
     return merged
 
 
+_DC_COLS_DEF = ["clearances", "blocked_shots", "interceptions", "tackles"]
+_DC_COLS_MID_FWD = ["clearances", "blocked_shots", "interceptions", "tackles", "recoveries"]
+_DC_THRESHOLD = {"DEF": 10, "MID": 12, "FWD": 12}
+
+
+def compute_points_with_dc(df: pd.DataFrame) -> pd.DataFrame:
+    """Add points_with_DC column: total_points + DC bonus where applicable.
+
+    Uses FBref-style separate columns (clearances, blocked_shots, interceptions,
+    tackles, recoveries) when available. Falls back to total_points otherwise.
+    GK rows are never modified.
+    """
+    df = df.copy()
+    dc_available = all(c in df.columns for c in _DC_COLS_DEF)
+    if not dc_available:
+        df["points_with_DC"] = df["total_points"]
+        return df
+
+    df["points_with_DC"] = df["total_points"].copy()
+    for pos, threshold in _DC_THRESHOLD.items():
+        cols = _DC_COLS_DEF if pos == "DEF" else _DC_COLS_MID_FWD
+        available_cols = [c for c in cols if c in df.columns]
+        mask = df["position"] == pos
+        dc_sum = df.loc[mask, available_cols].fillna(0).sum(axis=1)
+        bonus = (dc_sum >= threshold).astype(int) * 2
+        df.loc[mask, "points_with_DC"] = df.loc[mask, "total_points"] + bonus
+
+    # GK and any unhandled positions: no change
+    df["points_with_DC"] = df["points_with_DC"].fillna(df["total_points"])
+    return df
+
+
+def fetch_fbref_dc(seasons: list) -> pd.DataFrame:
+    """Fetch per-player per-match DC stats from FBref via soccerdata.
+
+    Returns empty DataFrame if soccerdata unavailable or fetch fails.
+    """
+    try:
+        import soccerdata as sd  # noqa: F401
+    except ImportError:
+        print("[prepare] soccerdata not installed — FBref DC fetch skipped")
+        return pd.DataFrame()
+
+    frames = []
+    for season in seasons:
+        try:
+            fbref = sd.FBref(leagues="ENG-Premier League", seasons=[season])
+            dc = fbref.read_player_match_stats(stat_type="defense")
+            dc["season"] = season
+            frames.append(dc)
+        except Exception as e:
+            print(f"[prepare] FBref DC fetch failed for {season}: {e}")
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
 def build_merged_dataset(
     seasons: list[str] | None = None,
     vaastav_dir: Path = VAASTAV_DIR,
@@ -250,4 +305,10 @@ def build_merged_dataset(
 
         dfs.append(df)
 
-    return merge_seasons(dfs)
+    merged = merge_seasons(dfs)
+
+    # Apply DC enrichment if DC columns are available (FBref data joined upstream)
+    if not merged.empty:
+        merged = compute_points_with_dc(merged)
+
+    return merged

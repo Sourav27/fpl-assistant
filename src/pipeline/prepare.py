@@ -198,7 +198,7 @@ def add_opponent_xg_stats(merged: pd.DataFrame) -> pd.DataFrame:
     team_xg = team_xg.sort_values(["team_key", "season", "GW"])
     team_xg["xg_for_roll_4"] = (
         team_xg.groupby(["team_key", "season"])["team_xg_for"]
-        .transform(lambda x: x.shift(1).rolling(4, min_periods=1).mean())
+        .transform(lambda x: x.shift(1).rolling(4, min_periods=4).mean())
     )
     opp_xg = team_xg[["team_key", "season", "GW", "xg_for_roll_4"]].rename(columns={
         "team_key": "opponent_team",

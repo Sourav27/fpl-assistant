@@ -22,6 +22,9 @@ FEATURE_COLUMNS = [
     "total_points_momentum", "minutes_momentum",
     "ict_index_momentum",
     "transfers_net",
+    "saves_roll_4",
+    "penalty_taker",
+    "opponent_xg_for_roll_4",
 ]
 
 ID_COLUMNS = ["element", "name", "position", "team", "now_cost"]

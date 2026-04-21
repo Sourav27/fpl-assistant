@@ -6,6 +6,8 @@ from src.pipeline.features import (
     add_rolling_features,
     add_momentum_features,
     add_form_features,
+    add_saves_rolling,
+    add_penalty_taker,
     engineer_features,
 )
 
@@ -167,3 +169,60 @@ class TestFixtureFeatures:
         dgw_rows = result[result["GW"] == 3]
         fixture_1 = dgw_rows[dgw_rows["is_fixture_2"] == 0].iloc[0]
         assert fixture_1["rest_days"] == 0.0
+
+
+class TestSavesRolling:
+    def test_saves_roll_4_column_added(self, player_history):
+        df = player_history.copy()
+        df["saves"] = [3, 4, 2, 5, 1, 3, 0, 2, 1, 2]
+        result = add_saves_rolling(df)
+        assert "saves_roll_4" in result.columns
+
+    def test_saves_roll_4_is_lagged(self, player_history):
+        df = player_history.copy()
+        df["saves"] = [3, 4, 2, 5, 1, 3, 0, 2, 1, 2]
+        result = add_saves_rolling(df)
+        # GW5 should see saves from GW1-4 (min_periods=1 so no NaN, just rolling mean)
+        gw5 = result[result["GW"] == 5].iloc[0]
+        expected = (3 + 4 + 2 + 5) / 4  # 3.5
+        assert gw5["saves_roll_4"] == pytest.approx(expected, abs=0.01)
+
+    def test_saves_roll_4_no_saves_column(self, player_history):
+        """If saves column is absent, dataframe is returned unchanged."""
+        result = add_saves_rolling(player_history)
+        assert "saves_roll_4" not in result.columns
+
+    def test_saves_roll_4_via_engineer_features(self, player_history):
+        df = player_history.copy()
+        df["saves"] = [3, 4, 2, 5, 1, 3, 0, 2, 1, 2]
+        result = engineer_features(df)
+        assert "saves_roll_4" in result.columns
+        assert result["saves_roll_4"].notna().any()
+
+
+class TestPenaltyTaker:
+    def test_penalty_taker_column_added(self, player_history):
+        df = player_history.copy()
+        df["penalties_order"] = [1, 2, None, 1, 3, 2, 1, None, 2, 3]
+        result = add_penalty_taker(df)
+        assert "penalty_taker" in result.columns
+
+    def test_penalty_taker_binary_values(self, player_history):
+        df = player_history.copy()
+        df["penalties_order"] = [1, 2, None, 1, 3, 2, 1, None, 2, 3]
+        result = add_penalty_taker(df)
+        first_takers = result[df["penalties_order"] == 1]["penalty_taker"]
+        assert first_takers.eq(1).all()
+        non_takers = result[df["penalties_order"].fillna(0) != 1]["penalty_taker"]
+        assert non_takers.eq(0).all()
+
+    def test_penalty_taker_zero_when_column_absent(self, player_history):
+        result = add_penalty_taker(player_history)
+        assert "penalty_taker" in result.columns
+        assert result["penalty_taker"].eq(0).all()
+
+    def test_penalty_taker_via_engineer_features(self, player_history):
+        df = player_history.copy()
+        df["penalties_order"] = [1, 2, None, 1, 3, 2, 1, None, 2, 3]
+        result = engineer_features(df)
+        assert "penalty_taker" in result.columns

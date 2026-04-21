@@ -202,6 +202,38 @@ def add_opponent_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_opponent_xg_stats(merged: pd.DataFrame) -> pd.DataFrame:
+    """Join opponent_xg_for_roll_4 to merged player-GW dataframe.
+
+    Computes team-level xG-for (sum of player expected_goals) per team/season/GW,
+    then joins it from the opponent's perspective so each player row reflects the
+    rolling offensive threat of their upcoming opponent.
+    """
+    if "expected_goals" not in merged.columns or "opponent_team" not in merged.columns:
+        return merged
+
+    # Determine team column: prefer numeric team_id (same int space as opponent_team)
+    team_col = "team_id" if "team_id" in merged.columns else "team"
+
+    team_xg = (
+        merged
+        .groupby([team_col, "season", "GW"], as_index=False)["expected_goals"]
+        .sum()
+        .rename(columns={team_col: "team_key", "expected_goals": "team_xg_for"})
+    )
+    team_xg = team_xg.sort_values(["team_key", "season", "GW"])
+    team_xg["xg_for_roll_4"] = (
+        team_xg.groupby(["team_key", "season"])["team_xg_for"]
+        .transform(lambda x: x.shift(1).rolling(4, min_periods=1).mean())
+    )
+    opp_xg = team_xg[["team_key", "season", "GW", "xg_for_roll_4"]].rename(columns={
+        "team_key": "opponent_team",
+        "xg_for_roll_4": "opponent_xg_for_roll_4",
+    })
+    merged = merged.merge(opp_xg, on=["opponent_team", "season", "GW"], how="left")
+    return merged
+
+
 def build_merged_dataset(
     seasons: list[str] | None = None,
     vaastav_dir: Path = VAASTAV_DIR,
@@ -237,6 +269,10 @@ def build_merged_dataset(
         # B-F1/B-F2: join opponent defensive stats
         if not df.empty and "opponent_team" in df.columns:
             df = add_opponent_stats(df)
+
+        # Track-C: join opponent xG-for rolling stats
+        if not df.empty:
+            df = add_opponent_xg_stats(df)
 
         dfs.append(df)
 

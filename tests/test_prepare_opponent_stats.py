@@ -1,7 +1,7 @@
 """Tests for opponent defensive stats joined onto player rows (B-F1/B-F2)."""
 import pandas as pd
 import pytest
-from src.pipeline.prepare import _compute_team_defensive_stats, add_opponent_stats
+from src.pipeline.prepare import _compute_team_defensive_stats, add_opponent_stats, add_opponent_xg_stats
 
 
 @pytest.fixture
@@ -88,3 +88,55 @@ class TestOpponentFormByPosition:
         fwd_gw8 = result[(result["code"] == 4) & (result["GW"] == 8)].iloc[0]
         if not pd.isna(gk_gw8["opponent_form_rolling_6"]) and not pd.isna(fwd_gw8["opponent_form_rolling_6"]):
             assert gk_gw8["opponent_form_rolling_6"] != pytest.approx(fwd_gw8["opponent_form_rolling_6"], abs=0.5)
+
+
+class TestAddOpponentXgStats:
+    @pytest.fixture
+    def xg_df(self):
+        """Two teams, 6 GWs, 3 players each side. Team 1 vs Team 2."""
+        rows = []
+        for gw in range(1, 7):
+            for i in range(3):
+                rows.append({
+                    "code": i, "team": 1, "team_id": 1,
+                    "opponent_team": 2, "season": "2023-24",
+                    "GW": gw, "expected_goals": 0.5,
+                })
+            for i in range(3, 6):
+                rows.append({
+                    "code": i, "team": 2, "team_id": 2,
+                    "opponent_team": 1, "season": "2023-24",
+                    "GW": gw, "expected_goals": 0.3,
+                })
+        return pd.DataFrame(rows)
+
+    def test_column_added(self, xg_df):
+        result = add_opponent_xg_stats(xg_df)
+        assert "opponent_xg_for_roll_4" in result.columns
+
+    def test_no_rows_dropped(self, xg_df):
+        result = add_opponent_xg_stats(xg_df)
+        assert len(result) == len(xg_df)
+
+    def test_all_team1_players_same_gw_have_same_value(self, xg_df):
+        """All team-1 players in the same GW face the same opponent xG-for."""
+        result = add_opponent_xg_stats(xg_df)
+        for gw in range(3, 7):
+            gw_t1 = result[(result["GW"] == gw) & (result["team"] == 1)]
+            vals = gw_t1["opponent_xg_for_roll_4"].dropna()
+            if len(vals) > 1:
+                assert vals.nunique() == 1, f"GW {gw}: team-1 players have different opponent_xg_for_roll_4"
+
+    def test_rolling_is_lagged(self, xg_df):
+        """Opponent xg-for at GW5 should use GW1-4 data (lag-1 rolling)."""
+        result = add_opponent_xg_stats(xg_df)
+        # Team-1 players face team-2 whose xG-for sum per GW = 3 * 0.3 = 0.9
+        # Rolling mean of 4 GWs = 0.9
+        team1_gw5 = result[(result["team"] == 1) & (result["GW"] == 5)].iloc[0]
+        assert team1_gw5["opponent_xg_for_roll_4"] == pytest.approx(0.9, abs=0.01)
+
+    def test_no_expected_goals_column_returns_unchanged(self, xg_df):
+        df = xg_df.drop(columns=["expected_goals"])
+        result = add_opponent_xg_stats(df)
+        assert "opponent_xg_for_roll_4" not in result.columns
+        assert len(result) == len(df)

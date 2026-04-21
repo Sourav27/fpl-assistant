@@ -4,11 +4,9 @@ import pandas as pd
 
 FIXTURE_FEATURE_COLUMNS = [
     "xGC_rolling_4",
-    "opponent_form_rolling_6",
     "is_home",
     "fixture_count",
     "rest_days",
-    "is_fixture_2",
 ]
 
 ROLLING_COLS = [
@@ -60,6 +58,28 @@ def add_form_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add derived form features."""
     if "transfers_in" in df.columns and "transfers_out" in df.columns:
         df["transfers_net"] = df["transfers_in"] - df["transfers_out"]
+    return df
+
+
+def add_saves_rolling(df: pd.DataFrame) -> pd.DataFrame:
+    """Add 4-GW lagged rolling mean of saves, grouped by (code/element, season)."""
+    if "saves" not in df.columns:
+        return df
+    player_id = "code" if "code" in df.columns else "element"
+    df = df.sort_values([player_id, "season", "GW"]).copy()
+    df["saves_roll_4"] = (
+        df.groupby([player_id, "season"])["saves"]
+        .transform(lambda x: x.shift(1).rolling(4, min_periods=1).mean())
+    )
+    return df
+
+
+def add_penalty_taker(df: pd.DataFrame) -> pd.DataFrame:
+    """Add binary flag: 1 if player is first-choice penalty taker."""
+    if "penalties_order" in df.columns:
+        df["penalty_taker"] = (df["penalties_order"] == 1).astype(int)
+    else:
+        df["penalty_taker"] = 0
     return df
 
 
@@ -182,6 +202,8 @@ def engineer_features(
     df = add_rolling_features(df)
     df = add_momentum_features(df)
     df = add_form_features(df)
+    df = add_saves_rolling(df)
+    df = add_penalty_taker(df)
     df = add_fixture_features(df)
     if drop_na:
         longest_window = max(DEFAULT_WINDOWS)

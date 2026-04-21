@@ -47,7 +47,7 @@ New 2025-26 FPL rule: DEF ≥10 CBI+tackles = 2 pts; MID/FWD ≥12 CBI+tackles+r
 2. If yes: collect from live API for 2025-26; use `bps_roll_4` as a proxy for all historical seasons (BPS sub-events partially encode CBI contributions).
 3. If no: source from FBref or StatsBomb match data — but note Track H explicitly dropped FBref due to rate limiting and DOM instability.
 
-**Interim approach (this plan):** `bps_roll_4` is the best available proxy — BPS rewards CBI via its sub-event scoring, so players who regularly earn CBIT points will have elevated rolling BPS. This is already in the model. Add a `TODO: replace bps_roll_4 with explicit cbi_roll_4 once data source confirmed` comment in `features.py`.
+**Interim approach (this plan):** Do NOT use `bps_roll_4` as a proxy unless Spearman ρ(`bps_roll_4`, `dc_actions`) > 0.9 is confirmed on 2025-26 data once DC stats are available. If correlation is below that threshold, the proxy introduces noise rather than signal and must be excluded. This validation is a prerequisite for any `cbi_roll_4` feature work — track as part of Task 0b Step 0b.1 once FPL API / FBref data is confirmed for 2025-26.
 
 This research is tracked as a future Track D/E task, not Track C.
 

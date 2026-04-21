@@ -182,10 +182,22 @@ class TestSavesRolling:
         df = player_history.copy()
         df["saves"] = [3, 4, 2, 5, 1, 3, 0, 2, 1, 2]
         result = add_saves_rolling(df)
-        # GW5 should see saves from GW1-4 (min_periods=1 so no NaN, just rolling mean)
+        # GW5 should see saves from GW1-4 (min_periods=4, so first valid value is at GW5)
         gw5 = result[result["GW"] == 5].iloc[0]
         expected = (3 + 4 + 2 + 5) / 4  # 3.5
         assert gw5["saves_roll_4"] == pytest.approx(expected, abs=0.01)
+
+    def test_saves_roll_4_early_gws_have_nan(self, player_history):
+        """saves_roll_4 should be NaN when fewer than 4 prior GWs exist."""
+        df = player_history.copy()
+        df["saves"] = [1.0] * len(df)
+        result = add_saves_rolling(df)
+        # First 4 rows: GW1 has 0 prior, GW2 has 1 prior, GW3 has 2 prior, GW4 has 3 prior
+        # All should be NaN with min_periods=4
+        assert result["saves_roll_4"].iloc[:4].isna().all(), \
+            "saves_roll_4 should be NaN for first 4 rows (min_periods=4)"
+        # Row 5+ (GW5 onward) should have a value
+        assert result["saves_roll_4"].iloc[4:].notna().any()
 
     def test_saves_roll_4_no_saves_column(self, player_history):
         """If saves column is absent, dataframe is returned unchanged."""

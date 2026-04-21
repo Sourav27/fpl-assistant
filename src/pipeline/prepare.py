@@ -152,19 +152,15 @@ def add_opponent_stats(df: pd.DataFrame) -> pd.DataFrame:
 
     Adds columns:
       - xGC_rolling_4: rolling goals conceded by the OPPONENT team
-      - opponent_form_rolling_6: avg pts allowed by opponent to this player's position (6-GW rolling)
     """
     if df.empty or "opponent_team" not in df.columns:
         df["xGC_rolling_4"] = float("nan")
-        df["opponent_form_rolling_6"] = float("nan")
         return df
 
     team_stats = _compute_team_defensive_stats(df)
-    pos_map = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 
     if team_stats.empty:
         df["xGC_rolling_4"] = float("nan")
-        df["opponent_form_rolling_6"] = float("nan")
         return df
 
     df = df.merge(
@@ -176,28 +172,6 @@ def add_opponent_stats(df: pd.DataFrame) -> pd.DataFrame:
     )
     df = df.rename(columns={"team_gc_roll_4": "xGC_rolling_4"})
     df = df.drop(columns=["team_opp"], errors="ignore")
-
-    if "position" in df.columns:
-        df["_pos_label"] = df["position"].map(pos_map) if df["position"].dtype == object else df["position"].map(pos_map)
-        df["opponent_form_rolling_6"] = float("nan")
-        for pos_label, pos_str in pos_map.items():
-            col = f"team_pts_allowed_{pos_str}_roll_6"
-            if col not in team_stats.columns:
-                continue
-            pos_mask = df["position"] == pos_label
-            if not pos_mask.any():
-                continue
-            temp = df[pos_mask].merge(
-                team_stats[["team", "season", "GW", col]],
-                left_on=["opponent_team", "season", "GW"],
-                right_on=["team", "season", "GW"],
-                how="left",
-                suffixes=("", "_opp2"),
-            )
-            df.loc[pos_mask, "opponent_form_rolling_6"] = temp[col].values
-        df = df.drop(columns=["_pos_label"], errors="ignore")
-    else:
-        df["opponent_form_rolling_6"] = float("nan")
 
     return df
 

@@ -69,7 +69,7 @@ def add_saves_rolling(df: pd.DataFrame) -> pd.DataFrame:
     df = df.sort_values([player_id, "season", "GW"]).copy()
     df["saves_roll_4"] = (
         df.groupby([player_id, "season"])["saves"]
-        .transform(lambda x: x.shift(1).rolling(4, min_periods=1).mean())
+        .transform(lambda x: x.shift(1).rolling(4, min_periods=4).mean())
     )
     return df
 

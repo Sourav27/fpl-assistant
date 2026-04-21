@@ -62,7 +62,9 @@ This research is tracked as a future Track D/E task, not Track C.
 | `src/pipeline/run.py` | Replace manual RF fit in `phase_retrain` with `validate_training_data()` + `tune_position_model()`; pass `algorithm=None` to `run_promotion_pipeline`; add `--n-trials`/`--algos` flags; add live-ρ guard before promotion |
 | `src/pipeline/promote.py` | Fix `run_promotion_pipeline` to infer algo from path stem into `result_entry["algorithm"]`; validate inferred algo; fix `build_active_models_manifest` to read per-position algo from ledger |
 | `src/pipeline/predict.py` | Add `compute_shap_reasons()` with feature-column validation; call from `predict_next_gw_per_position`; add `"shap_reason": "first"` to DGW aggregation |
-| `results/2025-26/gw{N}/predictions.csv` | New column: `shap_reason` (pipe-separated top-3 features with signed contributions) |
+| `src/pipeline/prepare.py` | Task 0b: FBref DC scrape + join; compute `points_with_DC` column |
+| `data/Fantasy-Premier-League/data/*/gws/*.csv` | `points_with_DC` column backfilled in historical data (not written back; used in training only) |
+| `results/2025-26/gw{N}/predictions.csv` | New columns: `shap_reason` (top-5 features with raw value + position-cohort rank), `shap_reason_dgw` (per-fixture if DGW) |
 | `results/2025-26/gw{N}/recommend.csv` | `shap_reason` column for each transferred-in player |
 | `tests/test_tune.py` | **NEW** — unit tests for `validate_training_data` + `tune_position_model` |
 | `tests/test_shap_explain.py` | **NEW** — unit tests for `compute_shap_reasons` |
@@ -200,6 +202,186 @@ Expected: all pass (new feature tests pass; no regressions in existing tests).
 git add src/pipeline/features.py src/pipeline/prepare.py src/pipeline/predict.py \
         tests/test_features.py tests/test_prepare_opponent_stats.py
 git commit -m "feat(track-c): add saves_roll_4, opponent_xg_for_roll_4, penalty_taker; drop zero-importance features"
+```
+
+---
+
+## Task 0b: DC enrichment via FBref — `points_with_DC` column
+
+**Goal:** Backfill a `points_with_DC` column to historical training data using FBref defensive action stats (clearances, blocked shots, interceptions, tackles, recoveries). For 2025-26, check FPL API first. This enriches the target variable for DEF/MID/FWD with a scoring stream that launched in 2025-26.
+
+**FPL DC rules:**
+- **DEF**: clearances + blocked shots + interceptions + tackles ≥ 10 → +2 pts
+- **MID/FWD**: clearances + blocked shots + interceptions + tackles + recoveries ≥ 12 → +2 pts
+
+**Data sources:**
+1. **FBref via soccerdata** (primary): Per-player per-match defensive stats from 2017-present. Already in `requirements.txt`.
+2. **FPL element-summary API** (2025-26 check): If `clearances_blocks_interceptions` + `tackles` now exposed, prefer for current season.
+
+**Files:**
+- Modify: `src/pipeline/prepare.py` — add `fetch_fbref_dc()` + `compute_points_with_dc()`
+- Modify: `tests/test_prepare_dc.py` — new test file
+
+**Join key strategy:** FBref uses player full names; FPL uses `code` (persistent int). Need a name→code mapping. Use `vaastav/player_idlist.csv` which has `first_name`, `second_name`, `code`, `team` — fuzzy match on `f"{first_name} {second_name}"` to FBref player name. Flag unmatched rows and log; do not drop them (unmatched players get `dc_actions=NaN` → `points_with_DC = total_points`).
+
+- [ ] **Step 0b.1: Check FPL API for 2025-26 DC fields**
+
+```bash
+# Inspect a single player's element-summary for current season
+python -c "
+import requests, json
+r = requests.get('https://fantasy.premierleague.com/api/element-summary/328/').json()
+history = r['history']
+if history:
+    print(list(history[0].keys()))
+"
+```
+
+If `clearances_blocks_interceptions` and `tackles` are present: add them as a data source in `fetch.py` for 2025-26. If absent: FBref is the only path.
+
+- [ ] **Step 0b.2: Write failing tests**
+
+```python
+# tests/test_prepare_dc.py
+import pandas as pd
+import pytest
+from src.pipeline.prepare import compute_points_with_dc
+
+
+def _make_player_df():
+    return pd.DataFrame({
+        "code": [1, 2, 3, 4],
+        "position": ["DEF", "MID", "FWD", "GK"],
+        "total_points": [6, 4, 8, 2],
+        # DEF: 7+2+0+3=12 ≥ 10 → +2
+        # MID: 3+1+2+4+1=11 < 12 → +0
+        # FWD: 2+1+3+5+3=14 ≥ 12 → +2
+        # GK: DC not applicable
+        "clearances":      [7, 3, 2, 0],
+        "blocked_shots":   [2, 1, 1, 0],
+        "interceptions":   [0, 2, 3, 0],
+        "tackles":         [3, 4, 5, 0],
+        "recoveries":      [0, 1, 3, 0],
+    })
+
+
+def test_def_dc_threshold_met():
+    df = compute_points_with_dc(_make_player_df())
+    assert df.loc[df["code"] == 1, "points_with_DC"].iloc[0] == 8  # 6 + 2
+
+
+def test_mid_dc_threshold_not_met():
+    df = compute_points_with_dc(_make_player_df())
+    assert df.loc[df["code"] == 2, "points_with_DC"].iloc[0] == 4  # unchanged
+
+
+def test_fwd_dc_threshold_met():
+    df = compute_points_with_dc(_make_player_df())
+    assert df.loc[df["code"] == 3, "points_with_DC"].iloc[0] == 10  # 8 + 2
+
+
+def test_gk_unaffected():
+    df = compute_points_with_dc(_make_player_df())
+    assert df.loc[df["code"] == 4, "points_with_DC"].iloc[0] == 2  # unchanged
+
+
+def test_nan_dc_falls_back_to_total_points():
+    """Rows without FBref data (no DC columns) must fall back to total_points."""
+    df = _make_player_df().drop(columns=["clearances", "blocked_shots",
+                                          "interceptions", "tackles", "recoveries"])
+    result = compute_points_with_dc(df)
+    assert (result["points_with_DC"] == result["total_points"]).all()
+```
+
+- [ ] **Step 0b.3: Run to confirm failures**
+
+```bash
+python -m pytest tests/test_prepare_dc.py -v
+```
+
+- [ ] **Step 0b.4: Implement `compute_points_with_dc` in `prepare.py`**
+
+```python
+_DC_COLS_DEF = ["clearances", "blocked_shots", "interceptions", "tackles"]
+_DC_COLS_MID_FWD = ["clearances", "blocked_shots", "interceptions", "tackles", "recoveries"]
+_DC_THRESHOLD = {"DEF": 10, "MID": 12, "FWD": 12}
+
+
+def compute_points_with_dc(df: pd.DataFrame) -> pd.DataFrame:
+    """Add points_with_DC column: total_points + DC bonus where applicable.
+
+    Requires: position, total_points, and optional DC stat columns.
+    Falls back to total_points when DC columns are absent or NaN.
+    GK is never modified.
+    """
+    df = df.copy()
+    dc_available = all(c in df.columns for c in _DC_COLS_DEF)
+    if not dc_available:
+        df["points_with_DC"] = df["total_points"]
+        return df
+
+    for pos, threshold in _DC_THRESHOLD.items():
+        cols = _DC_COLS_DEF if pos == "DEF" else _DC_COLS_MID_FWD
+        available_cols = [c for c in cols if c in df.columns]
+        mask = df["position"] == pos
+        dc_sum = df.loc[mask, available_cols].fillna(0).sum(axis=1)
+        bonus = (dc_sum >= threshold).astype(int) * 2
+        df.loc[mask, "points_with_DC"] = df.loc[mask, "total_points"] + bonus
+
+    # GK and any unhandled positions: no change
+    df["points_with_DC"] = df["points_with_DC"].fillna(df["total_points"])
+    return df
+```
+
+- [ ] **Step 0b.5: Implement `fetch_fbref_dc` in `prepare.py`**
+
+```python
+def fetch_fbref_dc(seasons: list[str]) -> pd.DataFrame:
+    """Fetch per-player per-match DC stats from FBref via soccerdata.
+
+    Returns DataFrame with columns: player_name, team, season, GW (approx),
+    match_date, clearances, blocked_shots, interceptions, tackles, recoveries.
+
+    Join to vaastav data by: (player_name fuzzy-match → code) + (match_date → GW).
+    Unmatched rows logged and excluded — caller must handle NaN DC gracefully.
+    """
+    import soccerdata as sd
+    frames = []
+    for season in seasons:
+        try:
+            fbref = sd.FBref(leagues="ENG-Premier League", seasons=[season])
+            # FBref defensive actions table: clearances, blocked_shots,
+            # interceptions, tackles, recoveries
+            dc = fbref.read_player_match_stats(stat_type="defense")
+            dc["season"] = season
+            frames.append(dc)
+        except Exception as e:
+            print(f"[prepare] FBref DC fetch failed for {season}: {e}")
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+```
+
+> **Note:** Exact FBref column names must be verified when implementing (`clearances`, `blocks_shots` or `blocked_shots`, `interceptions`, `tackles_won` vs `tackles`, `recoveries`). Read the returned DataFrame columns before finalising the mapping.
+
+- [ ] **Step 0b.6: Wire DC into `build_merged_dataset`**
+
+After the vaastav merge is complete and before returning:
+1. Call `fetch_fbref_dc(seasons)` to get the FBref defensive stats
+2. Fuzzy-join on player name + match date → GW + season to attach DC columns
+3. Call `compute_points_with_dc(merged)` to add `points_with_DC`
+4. In `phase_retrain`, replace `y = pos_df["total_points"]` with `y = pos_df["points_with_DC"]` for DEF/MID/FWD only (GK unchanged)
+
+- [ ] **Step 0b.7: Run tests**
+
+```bash
+python -m pytest tests/test_prepare_dc.py -v
+python -m pytest tests/ -q  # full suite
+```
+
+- [ ] **Step 0b.8: Commit**
+
+```bash
+git add src/pipeline/prepare.py tests/test_prepare_dc.py
+git commit -m "feat(track-c): add DC enrichment via FBref; points_with_DC column for DEF/MID/FWD"
 ```
 
 ---
@@ -945,21 +1127,28 @@ def xgb_model():
 
 
 def test_returns_series_same_length(rf_model):
-    result = compute_shap_reasons(rf_model, X, FEAT_COLS, top_n=3)
+    result = compute_shap_reasons(rf_model, X, FEAT_COLS, top_n=5)
     assert len(result) == N
 
 
 def test_reason_string_format(rf_model):
+    """Format: 'feat_name val (rank R/N) | feat_name val (rank R/N) | ...'"""
     result = compute_shap_reasons(rf_model, X, FEAT_COLS, top_n=3)
     sample = result.iloc[0]
     assert isinstance(sample, str)
     parts = [p.strip() for p in sample.split("|")]
     assert len(parts) == 3
     for part in parts:
-        assert ":" in part
-        # Sign prefix present
-        value_str = part.split(":")[1].strip()
-        assert value_str.startswith("+") or value_str.startswith("-")
+        assert "(rank " in part, f"Missing rank in part: {part!r}"
+        assert "/100)" in part, f"Expected /N) in part: {part!r}"
+
+
+def test_rank_within_cohort(rf_model):
+    """Rank should be within cohort_X (full position set), not just X."""
+    cohort = pd.concat([X, X + 0.5], ignore_index=True)  # 200-row cohort
+    result = compute_shap_reasons(rf_model, X, FEAT_COLS, top_n=1, cohort_X=cohort)
+    # Rank denominator should be cohort size (200), not X size (100)
+    assert "/200)" in result.iloc[0], f"Expected /200) in: {result.iloc[0]!r}"
 
 
 def test_works_with_xgb(xgb_model):
@@ -969,7 +1158,7 @@ def test_works_with_xgb(xgb_model):
 
 
 def test_top_n_respected(rf_model):
-    for top_n in [1, 2, 3]:
+    for top_n in [1, 2, 5]:
         result = compute_shap_reasons(rf_model, X, FEAT_COLS, top_n=top_n)
         parts = result.iloc[0].split("|")
         assert len(parts) == top_n
@@ -1000,22 +1189,18 @@ import shap
 Add function:
 
 ```python
-_VALID_ALGOS_FOR_SHAP = (
-    "sklearn.ensemble._forest.RandomForestRegressor",
-    "xgboost.sklearn.XGBRegressor",
-)
-
-
 def compute_shap_reasons(
     model,
     X: pd.DataFrame,
     feature_cols: list[str],
-    top_n: int = 3,
+    top_n: int = 5,
+    cohort_X: pd.DataFrame | None = None,
 ) -> pd.Series:
     """Return pipe-separated top-N SHAP feature contributions per player row.
 
-    Format: "minutes_roll_4: +2.14 | ict_index_roll_4: +1.03 | is_home: -0.41"
-    Positive = drove xP up, negative = drove xP down.
+    Format: "minutes_roll_4 13.2 (rank 1/860) | ict_index_roll_4 45.1 (rank 3/860) | ..."
+    Rank is descending (rank 1 = highest value) within cohort_X (full position set).
+    If cohort_X is None, ranks are computed within X itself.
 
     Raises ValueError on feature column mismatch to prevent silent wrong labels.
     """
@@ -1029,19 +1214,33 @@ def compute_shap_reasons(
             )
 
     X_clean = X[feature_cols].fillna(0)
+    cohort_clean = (cohort_X[feature_cols].fillna(0)
+                    if cohort_X is not None else X_clean)
+    cohort_n = len(cohort_clean)
+
+    # Precompute descending ranks for each feature within the cohort
+    # rank() returns float ranks; convert to int for display
+    cohort_ranks = cohort_clean.rank(ascending=False, method="min").astype(int)
+    # Get ranks for the rows in X by matching index
+    x_ranks = cohort_ranks.reindex(X_clean.index)
+
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X_clean)  # shape (n, p)
 
     reasons = []
-    for row_shap in shap_values:
+    for i, row_shap in enumerate(shap_values):
         abs_idx = np.argsort(np.abs(row_shap))[::-1][:top_n]
+        row = X_clean.iloc[i]
+        row_ranks = x_ranks.iloc[i]
         parts = [
-            f"{feature_cols[i]}: {'+' if row_shap[i] >= 0 else ''}{row_shap[i]:.2f}"
-            for i in abs_idx
+            f"{feature_cols[j]} {row[feature_cols[j]]:.2f} (rank {row_ranks[feature_cols[j]]}/{cohort_n})"
+            for j in abs_idx
         ]
         reasons.append(" | ".join(parts))
     return pd.Series(reasons, index=X.index)
 ```
+
+> **Note on cohort_X:** When calling from `predict_next_gw_per_position`, pass the full position cohort DataFrame as `cohort_X` so ranks are meaningful across all ~200–900 players in that position. This gives "rank 1/860" context that makes Salah's ict_index legible as elite within position.
 
 - [ ] **Step 4.4: Run tests**
 
@@ -1111,14 +1310,36 @@ python -m pytest tests/test_predict_position.py::test_predictions_have_shap_reas
 After `pos_df["xP"] = model.predict(X)` add:
 
 ```python
-pos_df["shap_reason"] = compute_shap_reasons(model, X, feature_cols, top_n=3)
+# cohort_X = all rows for this position (used for rank-within-position in SHAP output)
+cohort_X = pos_df[feature_cols].fillna(0)
+pos_df["shap_reason"] = compute_shap_reasons(
+    model, X, feature_cols, top_n=5, cohort_X=cohort_X
+)
+# DGW: build per-fixture label prefix using opponent column
+if "opponent_team" in pos_df.columns:
+    pos_df["_shap_fixture_label"] = (
+        "vs " + pos_df["opponent_team"].astype(str) + ": " + pos_df["shap_reason"]
+    )
+else:
+    pos_df["_shap_fixture_label"] = pos_df["shap_reason"]
 ```
 
-In the DGW aggregation `agg_cols` dict, add:
+In the DGW aggregation `agg_cols` dict, replace `"shap_reason": "first"` with:
 
 ```python
-"shap_reason": "first",  # fixture 1 SHAP reasons used for DGW; fixture 2 dropped (known limitation)
+"_shap_fixture_label": lambda s: "; ".join(s),  # "vs ARS: feat1...; vs WOL: feat1..."
 ```
+
+After aggregation, rename `_shap_fixture_label` → `shap_reason` and drop the temp column:
+
+```python
+# After groupby agg:
+result = result.rename(columns={"_shap_fixture_label": "shap_reason"})
+```
+
+**Output format examples:**
+- Single fixture: `"minutes_roll_4 90.0 (rank 12/860) | ict_index_roll_4 245.3 (rank 1/860) | ..."`
+- DGW: `"vs ARS: minutes_roll_4 90.0 (rank 12/860) | ...; vs WOL: minutes_roll_4 90.0 (rank 12/860) | ..."`
 
 - [ ] **Step 5.5: Write failing recommend test**
 
@@ -1247,6 +1468,20 @@ python -m src.pipeline.run retrain --gw 34 --skip-rho-guard
 
 ## Known limitations
 
-- **DGW SHAP**: For double-gameweek players, SHAP reasons reflect fixture 1 only. Fixture 2 reasons are dropped during aggregation. Accepted limitation; label as such in output.
+- **DGW SHAP**: Per-fixture SHAP is concatenated as `"vs ARS: ...; vs WOL: ..."`. Ranks in fixture 2 are computed against the same position cohort as fixture 1 (snapshot at prediction time) — this is correct since the cohort doesn't change within a GW.
 - **HPO runtime**: 50 trials × 5 folds × 4 positions × 2 algos ≈ 2000 model fits. Expect 20–40 min on CPU. Monthly retrain cadence makes this acceptable.
 - **Live-ρ guard**: Blocks promotion when last 3 GWs have ρ < 0. The current GW32-33 values (-0.19, -0.04) would trigger this — investigate distribution shift (target leakage, feature availability differences between vaastav and live FPL API) before running retrain.
+- **FBref join quality**: Name fuzzy-matching will miss some players (transfers, name variants). These rows fall back to `points_with_DC = total_points`. Match rate should be logged and reviewed before assuming enrichment is complete.
+
+## Deferred — Output Improvement Track (future)
+
+**Top-5 position cohort comparison:** Show the top-5 players by xP per position with their SHAP explanations side-by-side. Format:
+
+```
+MID (top 5):
+  Salah       xP=8.5  ict_index_roll_4 245.3 (rank 1/860) | form_roll_4 13.2 (rank 1/860) | ...
+  Semenyo     xP=8.4  ict_index_roll_4 180.1 (rank 8/860) | is_home 1 (rank N/A)         | ...
+  ...
+```
+
+This requires output rendering logic in `recommend.py` or a new `report.py` module. Deferred because it's a display concern separate from model and data quality. Implement as a separate Output Improvement track after Track C is complete.

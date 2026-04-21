@@ -23,7 +23,10 @@ from src.config import (
     ACTIVE_MODEL, ACTIVE_MODELS, BOOTSTRAP_MAX_AGE_HOURS, SNAPSHOTS_DIR,
     FPL_ENTRY_URL, load_user_config, UserConfigError, gw_dir,
     snapshot_dir as get_snapshot_dir,
+    BENCHMARK_PATH, METRICS_LEDGER_PATH, CHARTS_DIR, ACCURACY_LOG_PATH,
 )
+from src.pipeline.tune import tune_position_model, validate_training_data
+from src.pipeline.promote import run_promotion_pipeline
 from src.pipeline.fetch import (
     fetch_bootstrap, get_current_gw, get_next_deadline,
     extract_xp_snapshot, fetch_fixtures, fetch_live_gw_data,
@@ -843,79 +846,114 @@ def phase_recommend(
     return plan
 
 
-def phase_retrain(target_gw: int | None = None):
-    """Phase 4: Retrain 4 per-position RF models on full dataset (manual trigger)."""
+def _check_live_rho_guard(log_path) -> bool:
+    """Return True (blocked) if last 3 GWs in accuracy_log all have ρ < 0."""
+    from pathlib import Path
+    p = Path(log_path)
+    if not p.exists():
+        return False
+    try:
+        log = pd.read_csv(p)
+    except Exception:
+        return False
+    if "spearman_rho" not in log.columns:
+        return False
+    recent = log["spearman_rho"].dropna().tail(3)
+    if len(recent) >= 3 and (recent < 0).all():
+        print(
+            f"[retrain] BLOCKED: last {len(recent)} GWs all have live ρ < 0 "
+            f"({recent.tolist()}). Investigate distribution shift before retraining."
+        )
+        return True
+    return False
+
+
+def phase_retrain(
+    target_gw=None,
+    n_trials: int = 50,
+    algos=None,
+):
+    """Phase 4: Retrain 4 per-position models with Optuna HPO (RF vs XGB).
+
+    Skips promotion if the last 3 completed GWs in accuracy_log.csv all have
+    Spearman ρ < 0 — a signal of distribution shift requiring investigation.
+    """
     from datetime import date as _date
-    from sklearn.ensemble import RandomForestRegressor
-    from sklearn.model_selection import train_test_split
-    from sklearn.metrics import mean_absolute_error
-    from scipy.stats import spearmanr
     import joblib
-    from src.pipeline.promote import run_promotion_pipeline
-    from src.config import (BENCHMARK_PATH, METRICS_LEDGER_PATH,
-                             CHARTS_DIR, CURRENT_SEASON)
+
+    if algos is None:
+        algos = ["rf", "xgb"]
+
+    import src.config as _cfg_mod
+    rho_blocked = _check_live_rho_guard(_cfg_mod.ACCURACY_LOG_PATH)
 
     print("[retrain] Building full feature-engineered dataset...")
     merged = build_merged_dataset(vaastav_dir=VAASTAV_DIR)
     features = engineer_features(merged)
     print(f"[retrain] Training data: {len(features)} rows")
 
-    # Normalize position to string label
     if "position" in features.columns and pd.api.types.is_integer_dtype(features["position"]):
         features["position"] = features["position"].map(ELEMENT_TYPE_MAP)
 
     feature_cols = [c for c in ALL_FEATURE_COLUMNS if c in features.columns]
-
+    if not feature_cols:
+        _meta = {"total_points", "code", "element", "GW", "season", "position", "team", "name",
+                 "fixture", "round", "opponent_team", "was_home", "team_id"}
+        feature_cols = [c for c in features.select_dtypes(include="number").columns
+                        if c not in _meta]
     date_str = _date.today().strftime("%Y%m%d")
-    algorithm = "rf"
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
     position_results = {}
     for pos in ["GK", "DEF", "MID", "FWD"]:
         pos_df = features[features["position"] == pos].copy()
-        if len(pos_df) < 100:
-            print(f"[retrain] {pos}: insufficient data ({len(pos_df)} rows) — skipping")
+
+        if "season" in pos_df.columns and "GW" in pos_df.columns:
+            pos_df = pos_df.sort_values(["season", "GW"]).reset_index(drop=True)
+
+        try:
+            validate_training_data(pos_df, feature_cols, pos=pos, min_rows=100)
+        except ValueError as e:
+            print(f"[retrain] {pos}: skipped — {e}")
             continue
 
         X = pos_df[feature_cols].fillna(0)
         y = pos_df["total_points"]
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1, oob_score=True)
-        model.fit(X_train, y_train)
-
-        y_pred = model.predict(X_test)
-        mae = mean_absolute_error(y_test, y_pred)
-        rho, _ = spearmanr(y_pred, y_test)
-
-        new_path = MODELS_DIR / f"{algorithm}_{pos.lower()}_{date_str}.sav"
-        joblib.dump(model, new_path)
-        position_results[pos] = {"mae": mae, "rho": rho, "path": new_path, "n": len(pos_df), "model": model}
-        print(f"[retrain] {pos}: MAE={mae:.3f}, Spearman rho={rho:.3f} ({len(pos_df)} rows) -> {new_path.name}")
-
-    print("\n[retrain] Summary:")
-    for pos, r in position_results.items():
-        print(f"  {pos}: MAE={r['mae']:.3f}, rho={r['rho']:.3f}")
-
-    if position_results:
-        print("\n[retrain] Running promotion pipeline...")
-        trained_models = {
-            pos: (r["model"], r["path"])
-            for pos, r in position_results.items()
-            if "model" in r
-        }
-        run_promotion_pipeline(
-            trained_models=trained_models,
-            algorithm=algorithm,
-            features_df=features,
-            feature_cols=feature_cols,
-            date_str=date_str,
-            model_dir=MODELS_DIR,
-            benchmark_path=BENCHMARK_PATH,
-            ledger_path=METRICS_LEDGER_PATH,
-            charts_dir=CHARTS_DIR,
-            current_season=CURRENT_SEASON,
+        model, algo, params, cv_rho = tune_position_model(
+            pos=pos, X_train=X, y_train=y,
+            feat_cols=feature_cols, algos=algos, n_trials=n_trials,
         )
+
+        new_path = MODELS_DIR / f"{algo}_{pos.lower()}_{date_str}.sav"
+        joblib.dump(model, new_path)
+        position_results[pos] = {
+            "rho": cv_rho, "path": new_path,
+            "model": model, "algo": algo, "params": params,
+        }
+        print(f"[retrain] {pos}: {algo.upper()} CV-ρ={cv_rho:.4f} → {new_path.name}")
+
+    if not position_results:
+        print("[retrain] No positions trained. Check data quality.")
+        return
+
+    if rho_blocked:
+        print("[retrain] Promotion skipped — live ρ guard blocked promotion.")
+        return
+
+    print("\n[retrain] Running promotion pipeline...")
+    run_promotion_pipeline(
+        trained_models={pos: (r["model"], r["path"]) for pos, r in position_results.items()},
+        algorithm=None,
+        features_df=features,
+        feature_cols=feature_cols,
+        date_str=date_str,
+        model_dir=MODELS_DIR,
+        benchmark_path=BENCHMARK_PATH,
+        ledger_path=METRICS_LEDGER_PATH,
+        charts_dir=CHARTS_DIR,
+        current_season=CURRENT_SEASON,
+    )
 
 
 def main():
@@ -931,6 +969,12 @@ def main():
     parser.add_argument("--horizon", type=int, help="GWs to plan ahead (1-5, default from config)")
     parser.add_argument("--wildcard", action="store_true", help="Ignore current squad (wildcard/FH mode)")
     parser.add_argument("--team", default="default", help="Which team from user_config.yaml (default/alt)")
+    parser.add_argument("--n-trials", type=int, default=50,
+                        help="Optuna trials per algo per position (retrain only)")
+    parser.add_argument("--algos", nargs="+", default=["rf", "xgb"],
+                        choices=["rf", "xgb"])
+    parser.add_argument("--skip-rho-guard", action="store_true",
+                        help="Skip live-ρ guard and allow promotion even with negative live ρ")
     args = parser.parse_args()
 
     if args.phase == "pre-deadline":
@@ -940,7 +984,12 @@ def main():
     elif args.phase == "post-gw":
         phase_post_gw()
     elif args.phase == "retrain":
-        phase_retrain(args.gw)
+        if getattr(args, 'skip_rho_guard', False):
+            import unittest.mock
+            with unittest.mock.patch("src.pipeline.run._check_live_rho_guard"):
+                phase_retrain(args.gw, n_trials=args.n_trials, algos=args.algos)
+        else:
+            phase_retrain(args.gw, n_trials=args.n_trials, algos=args.algos)
     elif args.phase == "full":
         gw = phase_pre_deadline()
         if gw:

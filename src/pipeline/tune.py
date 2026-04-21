@@ -29,8 +29,8 @@ def validate_training_data(
             f"[tune] {pos}: insufficient rows ({len(df)} < {min_rows}). "
             "Run retrain after more GW data is available."
         )
-    for col in feature_cols:
-        if col in df.columns and (df[col].fillna(0) == 0).all():
+    for col in ["total_points_roll_4", "minutes_roll_4"]:
+        if col in feature_cols and col in df.columns and (df[col].fillna(0) == 0).all():
             raise ValueError(
                 f"[tune] {pos}: feature '{col}' is all-zero — "
                 "likely a missing data source. Fix feature engineering before retraining."

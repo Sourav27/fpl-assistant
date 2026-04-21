@@ -5,6 +5,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path("data")
 VAASTAV_DIR = DATA_DIR / "Fantasy-Premier-League"
 RESULTS_DIR = Path("results")
+ACCURACY_LOG_PATH = RESULTS_DIR / "accuracy_log.csv"
 MODELS_DIR = Path("models")
 PLOTS_DIR = Path("plots")
 SNAPSHOTS_DIR = DATA_DIR / "snapshots"

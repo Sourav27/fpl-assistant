@@ -29,6 +29,23 @@ from scipy.stats import spearmanr
 
 logger = logging.getLogger(__name__)
 
+from pathlib import Path as _Path
+
+_VALID_ALGOS = frozenset({"rf", "xgb"})
+
+
+def _infer_algo(algorithm, path) -> str:
+    """Return algo name: use provided value or infer from path stem first segment."""
+    if algorithm is not None:
+        return algorithm
+    inferred = _Path(path).stem.split("_")[0]
+    if inferred not in _VALID_ALGOS:
+        raise ValueError(
+            f"unknown algo '{inferred}' inferred from {_Path(path).name}. "
+            f"Filename must start with one of {_VALID_ALGOS}."
+        )
+    return inferred
+
 # Position-specific hauler thresholds (total_points >= threshold = hauler).
 # GK/DEF: clean sheet + bonus = ~9 pts. MID/FWD: one goal = 4-5 pts (too low); use 9/11.
 HAULER_THRESHOLDS: dict[str, int] = {"GK": 7, "DEF": 9, "MID": 9, "FWD": 11}
@@ -572,7 +589,7 @@ def run_promotion_pipeline(
 
         result_entry = {
             "model_file": model_file,
-            "algorithm": algorithm,
+            "algorithm": _infer_algo(algorithm, model_path),
             "date": date_str[:4] + "-" + date_str[4:6] + "-" + date_str[6:],
             "promoted": promoted,
             "test_rho": ev["test_rho"],

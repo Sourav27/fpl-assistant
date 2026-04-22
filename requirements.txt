@@ -6,6 +6,8 @@ openpyxl>=3.0.0
 # Machine Learning
 scikit-learn>=1.1.0
 xgboost>=1.7.0
+optuna>=3.0.0
+shap>=0.44.0,<1.0
 
 # Visualization
 matplotlib>=3.5.0

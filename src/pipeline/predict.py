@@ -4,6 +4,7 @@ import joblib
 import logging
 import pandas as pd
 import numpy as np
+import shap
 from pathlib import Path
 from src.config import ACTIVE_MODEL, ACTIVE_MODELS, get_active_models
 from src.pipeline.features import FIXTURE_FEATURE_COLUMNS
@@ -22,6 +23,9 @@ FEATURE_COLUMNS = [
     "total_points_momentum", "minutes_momentum",
     "ict_index_momentum",
     "transfers_net",
+    "saves_roll_4",
+    "penalty_taker",
+    "opponent_xg_for_roll_4",
 ]
 
 ID_COLUMNS = ["element", "name", "position", "team", "now_cost"]
@@ -135,6 +139,22 @@ def predict_next_gw_per_position(
                 pos_df = pos_df.copy()
                 pos_df["xP"] = xp
                 pos_df["_fallback"] = False
+                # Add SHAP reasons (only when model predicted successfully)
+                try:
+                    cohort_X = pos_df[available_features].fillna(0)
+                    pos_df["shap_reason"] = compute_shap_reasons(
+                        model, X, available_features, top_n=5, cohort_X=cohort_X
+                    )
+                    if "opponent_team" in pos_df.columns:
+                        pos_df["_shap_fixture_label"] = (
+                            "vs " + pos_df["opponent_team"].astype(str) + ": " + pos_df["shap_reason"]
+                        )
+                    else:
+                        pos_df["_shap_fixture_label"] = pos_df["shap_reason"]
+                except Exception as exc:
+                    logger.warning(f"[predict] SHAP failed for {pos}: {exc}")
+                    pos_df["shap_reason"] = ""
+                    pos_df["_shap_fixture_label"] = ""
             except Exception as exc:
                 # Handles sklearn version mismatches (e.g. model trained on 1.7, running 1.8)
                 logger.warning(
@@ -145,6 +165,8 @@ def predict_next_gw_per_position(
                 else:
                     pos_df["xP"] = 0.0
                 pos_df["_fallback"] = True
+                pos_df["shap_reason"] = ""
+                pos_df["_shap_fixture_label"] = ""
         else:
             # Fallback: use ep_next if provided, else 0
             if ep_next_map:
@@ -152,6 +174,8 @@ def predict_next_gw_per_position(
             else:
                 pos_df["xP"] = 0.0
             pos_df["_fallback"] = True
+            pos_df["shap_reason"] = ""
+            pos_df["_shap_fixture_label"] = ""
 
         predictions.append(pos_df)
 
@@ -168,6 +192,7 @@ def predict_next_gw_per_position(
         "team": "first",
         "position": "first",
         "name": "first",
+        "_shap_fixture_label": lambda s: "; ".join(s),
     }
     if "code" in combined.columns:
         agg_cols["code"] = "first"
@@ -176,6 +201,10 @@ def predict_next_gw_per_position(
 
     group_key = "element"
     result = combined.groupby(group_key, as_index=False).agg(agg_cols)
+    result = result.rename(columns={"_shap_fixture_label": "shap_reason"})
+    # Ensure shap_reason is never NaN
+    if "shap_reason" in result.columns:
+        result["shap_reason"] = result["shap_reason"].fillna("")
     return result
 
 
@@ -228,3 +257,56 @@ def save_full_predictions(predictions: pd.DataFrame, path: Path) -> None:
     df = df[[c for c in cols if c in df.columns]]
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)
+
+
+def compute_shap_reasons(
+    model,
+    X: pd.DataFrame,
+    feature_cols: list[str],
+    top_n: int = 5,
+    cohort_X: pd.DataFrame | None = None,
+) -> pd.Series:
+    """Return pipe-separated top-N SHAP feature contributions per player row.
+
+    Format: "minutes_roll_4 13.2 (rank 1/860) | ict_index_roll_4 45.1 (rank 3/860) | ..."
+    Rank is descending (rank 1 = highest value) within cohort_X (full position set).
+    If cohort_X is None, ranks are computed within X itself.
+
+    Raises ValueError on feature column mismatch to prevent silent wrong labels.
+    """
+    if hasattr(model, "feature_names_in_"):
+        expected = list(model.feature_names_in_)
+        if expected != feature_cols:
+            raise ValueError(
+                f"compute_shap_reasons column mismatch: "
+                f"model expects {expected[:5]}..., got {feature_cols[:5]}..."
+            )
+
+    X_clean = X[feature_cols].fillna(0)
+    cohort_clean = (cohort_X[feature_cols].fillna(0)
+                    if cohort_X is not None else X_clean)
+    cohort_n = len(cohort_clean)
+
+    cohort_ranks = cohort_clean.rank(ascending=False, method="min").astype(int)
+    x_ranks = cohort_ranks.reindex(X_clean.index)
+
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_clean)  # shape (n, p) or (n, p, outputs)
+    if isinstance(shap_values, list):
+        # Some versions return a list of arrays for multi-output
+        shap_values = shap_values[0]
+    shap_arr = np.array(shap_values)
+    if shap_arr.ndim == 3:
+        shap_arr = shap_arr[..., 0]
+
+    reasons = []
+    for i, row_shap in enumerate(shap_arr):
+        abs_idx = np.argsort(np.abs(row_shap))[::-1][:top_n]
+        row = X_clean.iloc[i]
+        row_ranks = x_ranks.iloc[i]
+        parts = [
+            f"{feature_cols[j]} {row[feature_cols[j]]:.2f} (rank {row_ranks[feature_cols[j]]}/{cohort_n})"
+            for j in abs_idx
+        ]
+        reasons.append(" | ".join(parts))
+    return pd.Series(reasons, index=X.index)

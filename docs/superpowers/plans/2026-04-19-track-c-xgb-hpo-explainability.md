@@ -1388,7 +1388,7 @@ git commit -m "feat(track-c): shap_reason in predictions.csv and recommend.csv; 
 - Modify: `tests/test_pipeline_e2e.py`
 - Modify: `docs/improvements-roadmap.md`
 
-- [ ] **Step 6.1: Write E2E smoke test**
+- [x] **Step 6.1: Write E2E smoke test**
 
 ```python
 # tests/test_pipeline_e2e.py — add:
@@ -1430,16 +1430,16 @@ def _make_e2e_df(n=500):
     })
 ```
 
-- [ ] **Step 6.2: Run full test suite**
+- [x] **Step 6.2: Run full test suite**
 
 ```bash
 python -m pytest tests/ -q
 ```
 Expected: all existing + new tests PASS.
 
-- [ ] **Step 6.3: Update `docs/improvements-roadmap.md`** — change Track C status to `✅ COMPLETE (2026-04-19)`, add built items summary.
+- [x] **Step 6.3: Update `docs/improvements-roadmap.md`** — change Track C status to `✅ COMPLETE (2026-04-19)`, add built items summary.
 
-- [ ] **Step 6.4: Final commit**
+- [x] **Step 6.4: Final commit**
 
 ```bash
 git add tests/test_pipeline_e2e.py docs/improvements-roadmap.md

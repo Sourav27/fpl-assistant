@@ -132,3 +132,62 @@ class TestDGWAggregation:
 @pytest.mark.skip(reason="B-F3-DGW: phase_predict fixture expansion not yet implemented")
 def test_phase_predict_expands_dgw_player_to_two_rows():
     pass
+
+
+DGW_ELEMENT_ID = 10  # matches dgw_players fixture
+
+
+class TestSHAPReasons:
+    def test_predictions_have_shap_reason(self, players_multi_position):
+        """predict_next_gw_per_position output must include shap_reason column."""
+        from src.pipeline.predict import predict_next_gw_per_position
+
+        mock_model = MagicMock()
+        mock_model.predict.return_value = [5.0]
+        mock_model.feature_names_in_ = None  # suppress column-mismatch check
+
+        models = {pos: mock_model for pos in ["GK", "DEF", "MID", "FWD"]}
+
+        with patch("src.pipeline.predict.compute_shap_reasons") as mock_shap:
+            mock_shap.return_value = pd.Series(
+                ["minutes_roll_4 0.00 (rank 1/1) | ict_index_roll_4 0.00 (rank 1/1)"],
+                index=players_multi_position[players_multi_position["position"] == "GK"].index,
+            )
+            # Return a Series for each position call
+            mock_shap.side_effect = lambda model, X, fc, top_n=5, cohort_X=None: pd.Series(
+                [f"feat_a 0.00 (rank 1/{len(X)}) | feat_b 0.00 (rank 2/{len(X)})"] * len(X),
+                index=X.index,
+            )
+            result = predict_next_gw_per_position(players_multi_position, models=models)
+
+        assert "shap_reason" in result.columns, "shap_reason column missing"
+        assert result["shap_reason"].notna().all(), "shap_reason has NaN values"
+        sample = result["shap_reason"].iloc[0]
+        assert "|" in sample, f"Expected pipe-separated reasons, got: {sample!r}"
+
+    def test_dgw_shap_reason_preserved(self, dgw_players):
+        """DGW players (2 fixture rows) must retain shap_reason after aggregation."""
+        from src.pipeline.predict import predict_next_gw_per_position
+
+        mock_model = MagicMock()
+        mock_model.predict.return_value = [4.0]
+
+        models = {pos: mock_model for pos in ["GK", "DEF", "MID", "FWD"]}
+
+        with patch("src.pipeline.predict.compute_shap_reasons") as mock_shap:
+            call_count = [0]
+
+            def shap_side_effect(model, X, fc, top_n=5, cohort_X=None):
+                call_count[0] += 1
+                label = f"fixture_{call_count[0]}"
+                return pd.Series(
+                    [f"{label} 1.00 (rank 1/{len(X)}) | feat_b 0.50 (rank 2/{len(X)})"] * len(X),
+                    index=X.index,
+                )
+
+            mock_shap.side_effect = shap_side_effect
+            result = predict_next_gw_per_position(dgw_players, models=models)
+
+        dgw_player = result[result["element"] == DGW_ELEMENT_ID]
+        assert len(dgw_player) == 1, "DGW player should be de-duplicated to one row"
+        assert dgw_player["shap_reason"].iloc[0] != "", "shap_reason must be non-empty after DGW aggregation"

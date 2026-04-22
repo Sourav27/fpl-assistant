@@ -238,6 +238,30 @@ class TestRecommendWildcard:
         assert total_cost_01m <= sample_user_state.total_value + 1  # 1 unit tolerance for rounding
 
 
+class TestSHAPReasonInRecommend:
+    def test_recommend_output_includes_shap_reason(self, sample_user_state, extended_predictions_df):
+        """Transfer recommendation must include non-empty shap_reason for incoming player."""
+        from src.pipeline.recommend import recommend_transfers
+        predictions_df = extended_predictions_df.copy()
+        predictions_df["shap_reason"] = "minutes_roll_4: +2.1 | ict_index_roll_4: +1.0 | is_home: +0.5"
+        plan = recommend_transfers(
+            user_state=sample_user_state,
+            predictions=predictions_df,
+            fixtures=[],
+            horizon=1,
+            fdr_sensitivity=0.15,
+            max_hit_points=8,
+        )
+        # Flatten: transfers is a list of GW dicts, each with a "transfers" list
+        all_transfers = []
+        for gw_entry in plan["transfers"]:
+            all_transfers.extend(gw_entry.get("transfers", []))
+        assert len(all_transfers) > 0, "Test fixture must produce at least one transfer"
+        for transfer in all_transfers:
+            assert "shap_reason" in transfer, "Transfer entry missing shap_reason"
+            assert transfer["shap_reason"] != "", "shap_reason must be non-empty"
+
+
 class TestSaveRecommendCSV:
     def test_creates_csv_with_correct_columns(self, tmp_path):
         from src.pipeline.recommend import save_recommend_csv

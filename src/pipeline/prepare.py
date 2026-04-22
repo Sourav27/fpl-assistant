@@ -152,19 +152,15 @@ def add_opponent_stats(df: pd.DataFrame) -> pd.DataFrame:
 
     Adds columns:
       - xGC_rolling_4: rolling goals conceded by the OPPONENT team
-      - opponent_form_rolling_6: avg pts allowed by opponent to this player's position (6-GW rolling)
     """
     if df.empty or "opponent_team" not in df.columns:
         df["xGC_rolling_4"] = float("nan")
-        df["opponent_form_rolling_6"] = float("nan")
         return df
 
     team_stats = _compute_team_defensive_stats(df)
-    pos_map = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 
     if team_stats.empty:
         df["xGC_rolling_4"] = float("nan")
-        df["opponent_form_rolling_6"] = float("nan")
         return df
 
     df = df.merge(
@@ -177,29 +173,89 @@ def add_opponent_stats(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns={"team_gc_roll_4": "xGC_rolling_4"})
     df = df.drop(columns=["team_opp"], errors="ignore")
 
-    if "position" in df.columns:
-        df["_pos_label"] = df["position"].map(pos_map) if df["position"].dtype == object else df["position"].map(pos_map)
-        df["opponent_form_rolling_6"] = float("nan")
-        for pos_label, pos_str in pos_map.items():
-            col = f"team_pts_allowed_{pos_str}_roll_6"
-            if col not in team_stats.columns:
-                continue
-            pos_mask = df["position"] == pos_label
-            if not pos_mask.any():
-                continue
-            temp = df[pos_mask].merge(
-                team_stats[["team", "season", "GW", col]],
-                left_on=["opponent_team", "season", "GW"],
-                right_on=["team", "season", "GW"],
-                how="left",
-                suffixes=("", "_opp2"),
-            )
-            df.loc[pos_mask, "opponent_form_rolling_6"] = temp[col].values
-        df = df.drop(columns=["_pos_label"], errors="ignore")
-    else:
-        df["opponent_form_rolling_6"] = float("nan")
+    return df
+
+
+def add_opponent_xg_stats(merged: pd.DataFrame) -> pd.DataFrame:
+    """Join opponent_xg_for_roll_4 to merged player-GW dataframe.
+
+    Computes team-level xG-for (sum of player expected_goals) per team/season/GW,
+    then joins it from the opponent's perspective so each player row reflects the
+    rolling offensive threat of their upcoming opponent.
+    """
+    if "expected_goals" not in merged.columns or "opponent_team" not in merged.columns:
+        return merged
+
+    # Determine team column: prefer numeric team_id (same int space as opponent_team)
+    team_col = "team_id" if "team_id" in merged.columns else "team"
+
+    team_xg = (
+        merged
+        .groupby([team_col, "season", "GW"], as_index=False)["expected_goals"]
+        .sum()
+        .rename(columns={team_col: "team_key", "expected_goals": "team_xg_for"})
+    )
+    team_xg = team_xg.sort_values(["team_key", "season", "GW"])
+    team_xg["xg_for_roll_4"] = (
+        team_xg.groupby(["team_key", "season"])["team_xg_for"]
+        .transform(lambda x: x.shift(1).rolling(4, min_periods=4).mean())
+    )
+    opp_xg = team_xg[["team_key", "season", "GW", "xg_for_roll_4"]].rename(columns={
+        "team_key": "opponent_team",
+        "xg_for_roll_4": "opponent_xg_for_roll_4",
+    })
+    merged = merged.merge(opp_xg, on=["opponent_team", "season", "GW"], how="left")
+    return merged
+
+
+_DC_COLS_DEF = ["clearances", "blocked_shots", "interceptions", "tackles"]
+_DC_COLS_MID_FWD = ["clearances", "blocked_shots", "interceptions", "tackles", "recoveries"]
+_DC_THRESHOLD = {"DEF": 10, "MID": 12, "FWD": 12}
+
+
+def compute_points_with_dc(df: pd.DataFrame) -> pd.DataFrame:
+    """Add points_with_DC column: total_points + DC bonus where applicable.
+
+    Uses FBref-style separate columns (clearances, blocked_shots, interceptions,
+    tackles, recoveries) when available. Falls back to total_points otherwise.
+    GK rows are never modified.
+    """
+    df = df.copy()
+    df["points_with_DC"] = df["total_points"].copy()
+
+    for pos, threshold in _DC_THRESHOLD.items():
+        required_cols = _DC_COLS_DEF if pos == "DEF" else _DC_COLS_MID_FWD
+        if not all(c in df.columns for c in required_cols):
+            continue  # skip position if required DC columns absent
+        mask = df["position"] == pos
+        dc_sum = df.loc[mask, required_cols].fillna(0).sum(axis=1)
+        bonus = (dc_sum >= threshold).astype(int) * 2
+        df.loc[mask, "points_with_DC"] = df.loc[mask, "total_points"] + bonus
 
     return df
+
+
+def fetch_fbref_dc(seasons: list) -> pd.DataFrame:
+    """Fetch per-player per-match DC stats from FBref via soccerdata.
+
+    Returns empty DataFrame if soccerdata unavailable or fetch fails.
+    """
+    try:
+        import soccerdata as sd  # noqa: F401
+    except ImportError:
+        print("[prepare] soccerdata not installed — FBref DC fetch skipped")
+        return pd.DataFrame()
+
+    frames = []
+    for season in seasons:
+        try:
+            fbref = sd.FBref(leagues="ENG-Premier League", seasons=[season])
+            dc = fbref.read_player_match_stats(stat_type="defense")
+            dc["season"] = season
+            frames.append(dc)
+        except Exception as e:
+            print(f"[prepare] FBref DC fetch failed for {season}: {e}")
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 def build_merged_dataset(
@@ -238,6 +294,16 @@ def build_merged_dataset(
         if not df.empty and "opponent_team" in df.columns:
             df = add_opponent_stats(df)
 
+        # Track-C: join opponent xG-for rolling stats
+        if not df.empty:
+            df = add_opponent_xg_stats(df)
+
         dfs.append(df)
 
-    return merge_seasons(dfs)
+    merged = merge_seasons(dfs)
+
+    # Apply DC enrichment if DC columns are available (FBref data joined upstream)
+    if not merged.empty:
+        merged = compute_points_with_dc(merged)
+
+    return merged

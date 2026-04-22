@@ -126,12 +126,14 @@ class TestPhaseRetrain:
                 rows.append({
                     "name": f"Player{player}", "position": "MID", "team": "Arsenal",
                     "element": player, "total_points": np.random.randint(0, 15),
-                    "minutes": 90, "goals_scored": 0, "assists": 0,
-                    "clean_sheets": 0, "ict_index": 10.0, "influence": 30.0,
-                    "creativity": 25.0, "threat": 40.0, "bps": 20, "bonus": 1,
-                    "value": 100, "transfers_in": 5000, "transfers_out": 1000,
-                    "selected": 3000000, "was_home": True, "opponent_team": 10,
-                    "fixture": gw, "round": gw, "GW": gw, "season": "2025-26",
+                    "minutes": 90, "goals_scored": (player + gw) % 3,
+                    "assists": (player * gw) % 2, "clean_sheets": gw % 2,
+                    "ict_index": 10.0 + player, "influence": 30.0 + gw,
+                    "creativity": 25.0 + player, "threat": 40.0 + gw, "bps": 20 + player,
+                    "bonus": gw % 3, "value": 100, "transfers_in": 5000,
+                    "transfers_out": 1000, "selected": 3000000, "was_home": True,
+                    "opponent_team": 10, "fixture": gw, "round": gw,
+                    "GW": gw, "season": "2025-26",
                 })
         pd.DataFrame(rows).to_csv(gw_dir / "merged_gw.csv", index=False)
 
@@ -140,7 +142,7 @@ class TestPhaseRetrain:
              patch("src.pipeline.run.MODELS_DIR", models_dir), \
              patch("src.pipeline.run.ACTIVE_MODEL", models_dir / "rf_model.sav"), \
              patch("src.pipeline.run.CURRENT_SEASON", "2025-26"), \
-             patch("src.pipeline.promote.run_promotion_pipeline") as mock_promote:
+             patch("src.pipeline.run.run_promotion_pipeline") as mock_promote:
             phase_retrain(target_gw=32)
 
         # Track I: retrain now saves per-position models with date-based naming.
@@ -207,3 +209,75 @@ class TestPostGwAnalysis:
              patch("src.pipeline.run.load_user_config", side_effect=UserConfigError("missing")):
             # Should not raise
             run_mod.phase_post_gw()
+
+
+# ---------------------------------------------------------------------------
+# Track C: Task 2 tests
+# ---------------------------------------------------------------------------
+
+import numpy as np
+
+
+def _make_retrain_df(n=500):
+    rng = np.random.default_rng(0)
+    seasons = ["2022-23"] * (n // 2) + ["2023-24"] * (n // 2)
+    gws = list(range(1, n // 2 + 1)) * 2
+    return pd.DataFrame({
+        "season": seasons,
+        "GW": gws,
+        "position": ["GK"] * 125 + ["DEF"] * 125 + ["MID"] * 125 + ["FWD"] * 125,
+        "total_points": rng.integers(0, 12, n).astype(float),
+        **{f"f{i}": rng.random(n) for i in range(5)},
+    })
+
+
+def test_phase_retrain_calls_tune_position_model(monkeypatch):
+    """phase_retrain must delegate to tune_position_model, not raw RF fit."""
+    import src.pipeline.run as run_mod
+
+    calls = []
+
+    def fake_tune(pos, X_train, y_train, feat_cols, algos, n_trials):
+        from sklearn.ensemble import RandomForestRegressor
+        m = RandomForestRegressor(n_estimators=5, random_state=0, oob_score=True)
+        m.fit(X_train, y_train)
+        calls.append(pos)
+        return m, "rf", {"n_estimators": 5}, 0.5
+
+    monkeypatch.setattr("src.pipeline.run.tune_position_model", fake_tune)
+    monkeypatch.setattr("src.pipeline.run.validate_training_data", lambda *a, **kw: None)
+    monkeypatch.setattr("src.pipeline.run.run_promotion_pipeline", lambda **kw: {})
+    monkeypatch.setattr("src.pipeline.run.build_merged_dataset", lambda **kw: _make_retrain_df())
+    monkeypatch.setattr("src.pipeline.run.engineer_features", lambda df: df)
+
+    run_mod.phase_retrain(n_trials=2)
+    assert set(calls) == {"GK", "DEF", "MID", "FWD"}, f"Expected all 4 positions, got {calls}"
+
+
+def test_phase_retrain_blocked_by_live_rho_guard(monkeypatch, tmp_path):
+    """phase_retrain must skip promotion when last 3 live ρ values are all negative."""
+    import src.pipeline.run as run_mod
+    import src.config as cfg
+
+    log_path = tmp_path / "accuracy_log.csv"
+    log_path.write_text(
+        "gw,season,spearman_rho\n"
+        "31,2025-26,-0.15\n"
+        "32,2025-26,-0.19\n"
+        "33,2025-26,-0.04\n"
+    )
+    monkeypatch.setattr(cfg, "ACCURACY_LOG_PATH", log_path)
+
+    promotion_calls = []
+    monkeypatch.setattr("src.pipeline.run.tune_position_model",
+        lambda **kw: (__import__('sklearn.ensemble', fromlist=['RandomForestRegressor'])
+                      .RandomForestRegressor(n_estimators=5).fit([[0]]*10, [0]*10),
+                      "rf", {}, 0.5))
+    monkeypatch.setattr("src.pipeline.run.validate_training_data", lambda *a, **kw: None)
+    monkeypatch.setattr("src.pipeline.run.run_promotion_pipeline",
+                        lambda **kw: promotion_calls.append(1))
+    monkeypatch.setattr("src.pipeline.run.build_merged_dataset", lambda **kw: _make_retrain_df())
+    monkeypatch.setattr("src.pipeline.run.engineer_features", lambda df: df)
+
+    run_mod.phase_retrain(n_trials=2)
+    assert len(promotion_calls) == 0, "Promotion must be blocked when live ρ < 0 for 3 GWs"

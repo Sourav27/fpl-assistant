@@ -1,1 +1,9 @@
-No previous snapshot found for GW33 or GW32; skipping price-change summary.
+GW33 -> GW34 (deadline transition)
+
+**Price up +£0.1m 📈**
+• Gibbs-White (NFO)  £7.4 → £7.5
+• Mateta (CRY)  £7.5 → £7.6
+• Thiago (BRE)  £7.3 → £7.4
+
+**New entries 🆕**
+• Derry (CHE)  £4.5

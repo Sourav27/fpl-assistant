@@ -20,7 +20,7 @@ Two modes:
 
       python scripts/fetch_bootstrap_snapshots.py --live
 
-Output: results/snapshots/bootstrap_gw{N}.json
+Output: data/snapshots/{SEASON}/gw{N}/bootstrap.json
 """
 import argparse
 import json
@@ -34,7 +34,9 @@ import requests
 # Paths
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).parent.parent
-SNAPSHOTS_DIR = REPO_ROOT / "results" / "snapshots"
+SEASON = "2025-26"
+DATA_SNAPSHOTS_DIR = REPO_ROOT / "data" / "snapshots"
+PRICE_CHANGES_FILE = DATA_SNAPSHOTS_DIR / "price_changes_latest.txt"
 
 FPL_BOOTSTRAP_URL = "https://fantasy.premierleague.com/api/bootstrap-static/"
 WAYBACK_CDX_URL = "https://web.archive.org/cdx/search/cdx"
@@ -51,6 +53,10 @@ WAYBACK_DELAY = 1.5
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _gw_snapshot_path(gw: int) -> Path:
+    return DATA_SNAPSHOTS_DIR / SEASON / f"gw{gw}" / "bootstrap.json"
+
 
 def _get(url: str, params: dict | None = None, timeout: int = 30) -> requests.Response:
     resp = requests.get(url, params=params, timeout=timeout)
@@ -105,8 +111,8 @@ def fetch_wayback_bootstrap(timestamp: str) -> dict:
 
 
 def save_snapshot(bootstrap: dict, gw: int) -> Path:
-    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = SNAPSHOTS_DIR / f"bootstrap_gw{gw}.json"
+    path = _gw_snapshot_path(gw)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(bootstrap), encoding="utf-8")
     return path
 
@@ -152,7 +158,7 @@ def backfill(target_gw: int | None = None) -> None:
     for event in past_events:
         gw = event["id"]
         deadline = event["deadline_time"]
-        out_path = SNAPSHOTS_DIR / f"bootstrap_gw{gw}.json"
+        out_path = _gw_snapshot_path(gw)
 
         if out_path.exists():
             print(f"GW{gw:02d}  SKIP  (already cached at {out_path})")
@@ -179,9 +185,6 @@ def backfill(target_gw: int | None = None) -> None:
         time.sleep(WAYBACK_DELAY)
 
     print(f"\nDone. saved={ok}  skipped={skipped}  failed={failed}")
-
-
-PRICE_CHANGES_FILE = SNAPSHOTS_DIR / "price_changes_latest.txt"
 
 
 def _price_change_summary(old_bootstrap: dict, new_bootstrap: dict, label: str) -> str:
@@ -254,12 +257,13 @@ def live_mode() -> None:
     Price-change comparison logic
     ─────────────────────────────
     Normal days (same next-GW across runs):
-      Compare bootstrap_gwN from the previous run against today's bootstrap.
+      Compare the gw{N}/bootstrap.json from the previous run against today's
+      bootstrap.
 
     Post-deadline transition (next-GW incremented from N to N+1):
-      The deadline has passed between runs. Compare the last pre-deadline
-      snapshot (bootstrap_gwN, still on disk) against today's bootstrap so
-      we can see which prices moved at the GW boundary.
+      The deadline has passed between runs. Compare gw{N-1}/bootstrap.json
+      against today's bootstrap so we can see which prices moved at the GW
+      boundary.
     """
     try:
         bootstrap = fetch_live_bootstrap()
@@ -277,8 +281,8 @@ def live_mode() -> None:
     # ── Price-change summary (read old files BEFORE overwriting) ────────────
     summary: str | None = None
     if next_gw is not None:
-        same_gw_path = SNAPSHOTS_DIR / f"bootstrap_gw{next_gw}.json"
-        prev_gw_path = SNAPSHOTS_DIR / f"bootstrap_gw{next_gw - 1}.json"
+        same_gw_path = _gw_snapshot_path(next_gw)
+        prev_gw_path = _gw_snapshot_path(next_gw - 1)
 
         if same_gw_path.exists():
             old_bootstrap = json.loads(same_gw_path.read_text(encoding="utf-8"))
@@ -301,7 +305,7 @@ def live_mode() -> None:
 
     if summary:
         print(f"\n{summary}")
-        SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+        DATA_SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
         PRICE_CHANGES_FILE.write_text(summary, encoding="utf-8")
 
     # ── Save snapshots for current and next GW ───────────────────────────────

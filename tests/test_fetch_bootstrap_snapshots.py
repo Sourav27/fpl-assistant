@@ -52,6 +52,11 @@ def _mock_get(return_value) -> MagicMock:
     return m
 
 
+def _gw_path(base: Path, gw: int) -> Path:
+    """Mirror _gw_snapshot_path() using a tmp base dir and the module SEASON."""
+    return base / fbs.SEASON / f"gw{gw}" / "bootstrap.json"
+
+
 # ---------------------------------------------------------------------------
 # find_wayback_snapshot
 # ---------------------------------------------------------------------------
@@ -106,12 +111,12 @@ class TestBackfill:
 
     def test_skips_gw_when_snapshot_already_cached(self, tmp_path, capsys):
         """GW with an existing snapshot file must not trigger a Wayback fetch."""
-        snapshots_dir = tmp_path / "snapshots"
-        snapshots_dir.mkdir()
-        (snapshots_dir / "bootstrap_gw30.json").write_text(json.dumps({"events": []}))
+        gw_path = _gw_path(tmp_path, 30)
+        gw_path.parent.mkdir(parents=True, exist_ok=True)
+        gw_path.write_text(json.dumps({"events": []}))
 
         with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=_bootstrap(32)), \
-             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir), \
+             patch("fetch_bootstrap_snapshots.DATA_SNAPSHOTS_DIR", tmp_path), \
              patch("fetch_bootstrap_snapshots.find_wayback_snapshot") as mock_cdx, \
              patch("fetch_bootstrap_snapshots.time.sleep"):
             fbs.backfill(target_gw=30)
@@ -120,29 +125,24 @@ class TestBackfill:
         assert "SKIP" in capsys.readouterr().out
 
     def test_fetches_and_saves_snapshot_for_uncached_past_gw(self, tmp_path):
-        """Uncached past GW: fetch from Wayback and write to SNAPSHOTS_DIR."""
+        """Uncached past GW: fetch from Wayback and write to gw{N}/bootstrap.json."""
         past_bootstrap = {"events": [{"id": 30}], "elements": []}
-        snapshots_dir = tmp_path / "snapshots"
-        snapshots_dir.mkdir()
 
         with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=_bootstrap(32)), \
-             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir), \
+             patch("fetch_bootstrap_snapshots.DATA_SNAPSHOTS_DIR", tmp_path), \
              patch("fetch_bootstrap_snapshots.find_wayback_snapshot", return_value="20260313090000"), \
              patch("fetch_bootstrap_snapshots.fetch_wayback_bootstrap", return_value=past_bootstrap), \
              patch("fetch_bootstrap_snapshots.time.sleep"):
             fbs.backfill(target_gw=30)
 
-        saved = snapshots_dir / "bootstrap_gw30.json"
+        saved = _gw_path(tmp_path, 30)
         assert saved.exists()
         assert json.loads(saved.read_text(encoding="utf-8"))["events"][0]["id"] == 30
 
     def test_errors_when_target_gw_is_current_or_future(self, tmp_path, capsys):
         """Requesting backfill for current/future GW must print ERROR and not fetch."""
-        snapshots_dir = tmp_path / "snapshots"
-        snapshots_dir.mkdir()
-
         with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=_bootstrap(32)), \
-             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir), \
+             patch("fetch_bootstrap_snapshots.DATA_SNAPSHOTS_DIR", tmp_path), \
              patch("fetch_bootstrap_snapshots.find_wayback_snapshot") as mock_cdx:
             fbs.backfill(target_gw=32)
 
@@ -151,17 +151,14 @@ class TestBackfill:
 
     def test_warns_when_no_wayback_snapshot_available(self, tmp_path, capsys):
         """CDX returning no snapshots must print WARNING and leave no file."""
-        snapshots_dir = tmp_path / "snapshots"
-        snapshots_dir.mkdir()
-
         with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=_bootstrap(32)), \
-             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir), \
+             patch("fetch_bootstrap_snapshots.DATA_SNAPSHOTS_DIR", tmp_path), \
              patch("fetch_bootstrap_snapshots.find_wayback_snapshot", return_value=None), \
              patch("fetch_bootstrap_snapshots.time.sleep"):
             fbs.backfill(target_gw=30)
 
         assert "WARNING" in capsys.readouterr().out
-        assert not (snapshots_dir / "bootstrap_gw30.json").exists()
+        assert not _gw_path(tmp_path, 30).exists()
 
     def test_handles_api_failure_on_startup(self, capsys):
         """If initial live bootstrap fetch fails, backfill must print ERROR not crash.
@@ -175,8 +172,6 @@ class TestBackfill:
 
     def test_continues_remaining_gws_after_one_failure(self, tmp_path, capsys):
         """A Wayback fetch error on one GW must not abort the rest of the backfill."""
-        snapshots_dir = tmp_path / "snapshots"
-        snapshots_dir.mkdir()
         good_bootstrap = {"events": [{"id": 29}], "elements": []}
 
         # GW29 fails, GW30 succeeds
@@ -186,14 +181,14 @@ class TestBackfill:
             return "20260313090000"
 
         with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=_bootstrap(32)), \
-             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir), \
+             patch("fetch_bootstrap_snapshots.DATA_SNAPSHOTS_DIR", tmp_path), \
              patch("fetch_bootstrap_snapshots.find_wayback_snapshot", side_effect=wayback_side_effect), \
              patch("fetch_bootstrap_snapshots.fetch_wayback_bootstrap", return_value=good_bootstrap), \
              patch("fetch_bootstrap_snapshots.time.sleep"):
             fbs.backfill()  # must not raise
 
         # GW30 should still be saved despite GW29 failing
-        assert (snapshots_dir / "bootstrap_gw30.json").exists()
+        assert _gw_path(tmp_path, 30).exists()
 
 
 # ---------------------------------------------------------------------------
@@ -203,29 +198,27 @@ class TestBackfill:
 class TestLiveMode:
 
     def test_saves_snapshot_for_both_current_and_next_gw(self, tmp_path):
-        """live_mode must write bootstrap_gw{N}.json for both current and next GW."""
+        """live_mode must write gw{N}/bootstrap.json for both current and next GW."""
         bootstrap = _bootstrap(current_gw=32, next_gw=33)
-        snapshots_dir = tmp_path / "snapshots"
-        snapshots_dir.mkdir()
 
         with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=bootstrap), \
-             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir):
+             patch("fetch_bootstrap_snapshots.DATA_SNAPSHOTS_DIR", tmp_path), \
+             patch("fetch_bootstrap_snapshots.PRICE_CHANGES_FILE", tmp_path / "price_changes_latest.txt"):
             fbs.live_mode()
 
-        assert (snapshots_dir / "bootstrap_gw32.json").exists()
-        assert (snapshots_dir / "bootstrap_gw33.json").exists()
+        assert _gw_path(tmp_path, 32).exists()
+        assert _gw_path(tmp_path, 33).exists()
 
     def test_saved_snapshot_contains_events_key(self, tmp_path):
         """Snapshot file must be valid JSON with an 'events' key."""
         bootstrap = _bootstrap(current_gw=32, next_gw=33)
-        snapshots_dir = tmp_path / "snapshots"
-        snapshots_dir.mkdir()
 
         with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=bootstrap), \
-             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir):
+             patch("fetch_bootstrap_snapshots.DATA_SNAPSHOTS_DIR", tmp_path), \
+             patch("fetch_bootstrap_snapshots.PRICE_CHANGES_FILE", tmp_path / "price_changes_latest.txt"):
             fbs.live_mode()
 
-        data = json.loads((snapshots_dir / "bootstrap_gw32.json").read_text(encoding="utf-8"))
+        data = json.loads(_gw_path(tmp_path, 32).read_text(encoding="utf-8"))
         assert "events" in data
 
     def test_handles_api_failure_gracefully(self, capsys):
@@ -243,14 +236,13 @@ class TestLiveMode:
         bootstrap = _bootstrap(current_gw=38, next_gw=None)
         for e in bootstrap["events"]:
             e["is_next"] = False
-        snapshots_dir = tmp_path / "snapshots"
-        snapshots_dir.mkdir()
 
         with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=bootstrap), \
-             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir):
+             patch("fetch_bootstrap_snapshots.DATA_SNAPSHOTS_DIR", tmp_path), \
+             patch("fetch_bootstrap_snapshots.PRICE_CHANGES_FILE", tmp_path / "price_changes_latest.txt"):
             fbs.live_mode()
 
-        assert (snapshots_dir / "bootstrap_gw38.json").exists()
+        assert _gw_path(tmp_path, 38).exists()
 
 
 # ---------------------------------------------------------------------------
@@ -312,27 +304,26 @@ class TestLiveModeWritesPriceChangesFile:
 
     def test_writes_price_changes_latest_txt(self, tmp_path):
         """live_mode() must write price_changes_latest.txt when a previous snapshot exists."""
-        snapshots_dir = tmp_path / "snapshots"
-        snapshots_dir.mkdir()
-
         old_bootstrap = _bootstrap(current_gw=31, next_gw=32)
         old_bootstrap["elements"] = [_player(1, "Saka", 1, 100)]
         old_bootstrap["teams"] = [{"id": 1, "short_name": "ARS"}]
-        (snapshots_dir / "bootstrap_gw32.json").write_text(
-            json.dumps(old_bootstrap), encoding="utf-8"
-        )
+
+        # Pre-seed the old gw32 snapshot so there's something to compare against
+        old_path = _gw_path(tmp_path, 32)
+        old_path.parent.mkdir(parents=True, exist_ok=True)
+        old_path.write_text(json.dumps(old_bootstrap), encoding="utf-8")
 
         new_bootstrap = _bootstrap(current_gw=32, next_gw=33)
         new_bootstrap["elements"] = [_player(1, "Saka", 1, 101)]  # price rise
         new_bootstrap["teams"] = [{"id": 1, "short_name": "ARS"}]
 
+        price_file = tmp_path / "price_changes_latest.txt"
+
         with patch("fetch_bootstrap_snapshots.fetch_live_bootstrap", return_value=new_bootstrap), \
-             patch("fetch_bootstrap_snapshots.SNAPSHOTS_DIR", snapshots_dir), \
-             patch("fetch_bootstrap_snapshots.PRICE_CHANGES_FILE",
-                   snapshots_dir / "price_changes_latest.txt"):
+             patch("fetch_bootstrap_snapshots.DATA_SNAPSHOTS_DIR", tmp_path), \
+             patch("fetch_bootstrap_snapshots.PRICE_CHANGES_FILE", price_file):
             fbs.live_mode()
 
-        price_file = snapshots_dir / "price_changes_latest.txt"
         assert price_file.exists(), "price_changes_latest.txt was not written"
         content = price_file.read_text(encoding="utf-8")
         assert "Saka" in content

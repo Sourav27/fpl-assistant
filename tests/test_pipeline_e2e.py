@@ -586,3 +586,44 @@ class TestPostGwDiscord:
         )
         assert result.returncode == 0
         assert "Finished: False" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Track C: Task 6 — E2E HPO smoke test
+# ---------------------------------------------------------------------------
+
+import numpy as np
+
+
+def _make_e2e_df(n=500):
+    rng = np.random.default_rng(1)
+    seasons = ["2022-23"] * (n // 2) + ["2023-24"] * (n // 2)
+    gws = list(range(1, n // 2 + 1)) * 2
+    return pd.DataFrame({
+        "season": seasons,
+        "GW": gws,
+        "position": ["GK"] * 125 + ["DEF"] * 125 + ["MID"] * 125 + ["FWD"] * 125,
+        "total_points": rng.integers(0, 12, n).astype(float),
+        **{f"f{i}": rng.random(n) for i in range(6)},
+    })
+
+
+def test_retrain_hpo_smoke(monkeypatch, tmp_path):
+    """phase_retrain with n_trials=2 + XGB only completes and writes .sav files."""
+    import src.pipeline.run as run_mod
+    import src.config as cfg
+
+    log = tmp_path / "accuracy_log.csv"
+    log.write_text("gw,season,spearman_rho\n31,2025-26,0.45\n32,2025-26,0.38\n")
+    monkeypatch.setattr(cfg, "ACCURACY_LOG_PATH", log)
+    monkeypatch.setattr(run_mod, "MODELS_DIR", tmp_path)
+    monkeypatch.setattr(run_mod, "run_promotion_pipeline", lambda **kw: None)
+    monkeypatch.setattr(run_mod, "build_merged_dataset", lambda **kw: _make_e2e_df())
+    monkeypatch.setattr(run_mod, "engineer_features", lambda df: df)
+
+    run_mod.phase_retrain(n_trials=2, algos=["xgb"])
+
+    sav_files = list(tmp_path.glob("*.sav"))
+    assert len(sav_files) == 4, f"Expected 4 .sav files (one per position), got: {[f.name for f in sav_files]}"
+    for f in sav_files:
+        assert f.stem.startswith("xgb_"), f"Expected xgb_ prefix, got {f.stem}"

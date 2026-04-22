@@ -271,29 +271,23 @@ The following items from the original Track B spec are **not included** in this 
 
 ---
 
-### 💡 Track C — Quick ML Wins (High Impact, Low Effort)
-**Status:** BACKLOG · **Effort:** ~1 day each · **Depends on Track I**
-**Plan:** Not yet written — write plan before starting
+### ✅ Track C — XGBoost HPO & SHAP Explainability
+**Status:** COMPLETE (2026-04-22) · **Plan:** `docs/superpowers/plans/2026-04-19-track-c-xgb-hpo-explainability.md`
 
-| # | ID | What | Why | Effort |
-|---|----|------|-----|--------|
-| 1 | P1a | Swap RF for XGBoost | NB04: XGBoost MAE 1.026 vs RF 1.035 — 1% consistent improvement | 2 h |
-| 2 | P1b | Two-stage playing-time model | `minutes` is top feature (16–30% importance); predicting P(plays ≥60min) as Stage 1 reduces residual error | 1 day |
+**Built:**
+- `src/pipeline/tune.py` — `validate_training_data()` + `tune_position_model()`: Optuna TPE HPO with TimeSeriesSplit CV (5 folds), Spearman ρ objective; RF and XGBoost per position; winner selected by walk-forward ρ
+- `phase_retrain` in `run.py` — delegates to `tune_position_model`; live-ρ guard blocks promotion when last 3 GWs all have ρ < 0; `--n-trials`, `--algos`, `--skip-rho-guard` CLI flags
+- `promote.py` — per-position algo inferred from `.sav` filename stem; validated against known algos
+- `compute_shap_reasons()` in `predict.py` — TreeExplainer SHAP with feature-value + rank-within-position-cohort; top-N pipe-separated string per player
+- `shap_reason` column in `predictions.csv` and `recommend.csv`; DGW: per-fixture labels joined by `"; "`
+- Feature enrichment: `saves_roll_4` (GK scoring stream), `opponent_xg_for_roll_4` (DEF/GK forward-looking threat), `penalty_taker` flag (MID/FWD variance)
+- `compute_points_with_dc()` in `prepare.py` — DC bonus enrichment for DEF/MID/FWD using FBref stats (falls back to `total_points` when DC columns absent)
+- Tests: `tests/test_tune.py`, `tests/test_shap_explain.py`, extensions to `test_run.py`, `test_promote.py`, `test_predict_position.py`, `test_recommend.py`, `test_pipeline_e2e.py`
 
-**P1a (XGBoost swap) — implementation sketch:**
-```python
-# In src/pipeline/run.py:phase_retrain()
-from xgboost import XGBRegressor
-model = XGBRegressor(n_estimators=300, learning_rate=0.05, max_depth=6,
-                     subsample=0.8, colsample_bytree=0.8, random_state=42, n_jobs=-1)
-```
-File: `src/pipeline/run.py:phase_retrain()`. Risk: low — drop-in replacement.
-
-**P1b (Two-stage model) — outline:**
-- Stage 1: `LogisticRegression` on `minutes_roll_4`, `selected_by_percent`, `availability_status` → P(plays ≥ 60 min)
-- Stage 2: current RF/XGB only for players where Stage 1 > 0.5
-- New file: `src/pipeline/predict.py:predict_playing_time()`
-- Risk: medium — needs binary minutes ≥ 60 target column in training data
+**Deferred:**
+- Task 0b FBref DC scrape (wire-up deferred pending data source confirmation)
+- `is_cb` flag (needs external positional data)
+- Output improvement track (top-5 cohort SHAP comparison display)
 
 ---
 

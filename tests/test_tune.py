@@ -35,9 +35,10 @@ def test_validate_raises_insufficient_rows():
 
 def test_validate_raises_all_zero_feature():
     bad = DF.copy()
-    bad["f0"] = 0.0
+    bad["total_points_roll_4"] = 0.0
+    cols_with_guard = FEAT_COLS + ["total_points_roll_4"]
     with pytest.raises(ValueError, match="all-zero"):
-        validate_training_data(bad, FEAT_COLS, pos="MID", min_rows=100)
+        validate_training_data(bad, cols_with_guard, pos="MID", min_rows=100)
 
 
 def test_validate_raises_on_nan_rho_risk():

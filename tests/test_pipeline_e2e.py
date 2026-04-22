@@ -441,8 +441,14 @@ class TestPostGwDiscord:
         gw31 = results / "2025-26" / "gw31"
         gw31.mkdir(parents=True, exist_ok=True)
         df.to_csv(gw31 / "predictions.csv", index=False)
-        df.to_csv(gw31 / "optimal_squad.csv", index=False)
-        df.head(15).to_csv(gw31 / "squad_recommend.csv", index=False)
+        squad = df.head(15).copy()
+        squad["is_starter"] = [True] * 11 + [False] * 4
+        squad["is_captain"] = [i == 0 for i in range(15)]
+        squad["is_vice_captain"] = [i == 1 for i in range(15)]
+        squad["bench_order"] = [None] * 11 + [1, 2, 3, 4]
+        squad.to_csv(gw31 / "optimal_squad.csv", index=False)
+        squad.to_csv(gw31 / "recommended_squad.csv", index=False)
+        squad.to_csv(gw31 / "squad_recommend.csv", index=False)
         return results
 
     def test_post_gw_accuracy_log_has_spearman_rho(self, tmp_path, e2e_bootstrap):
@@ -457,7 +463,8 @@ class TestPostGwDiscord:
         entry_picks_response = MagicMock()
         entry_picks_response.json.return_value = {
             "entry_history": {"points": 55},
-            "picks": [{"element": p["id"]} for p in e2e_bootstrap["elements"][:11]],
+            "picks": [{"element": p["id"], "position": i + 1, "multiplier": 1}
+                      for i, p in enumerate(e2e_bootstrap["elements"][:15])],
         }
         entry_response = MagicMock()
         entry_response.json.return_value = {"leagues": {"classic": []}}
@@ -492,7 +499,8 @@ class TestPostGwDiscord:
         entry_picks_response = MagicMock()
         entry_picks_response.json.return_value = {
             "entry_history": {"points": 55},
-            "picks": [{"element": p["id"]} for p in e2e_bootstrap["elements"][:11]],
+            "picks": [{"element": p["id"], "position": i + 1, "multiplier": 1}
+                      for i, p in enumerate(e2e_bootstrap["elements"][:15])],
         }
 
         with patch("src.pipeline.run.fetch_bootstrap", return_value=bs_finished), \

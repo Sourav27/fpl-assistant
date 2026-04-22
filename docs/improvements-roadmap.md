@@ -104,6 +104,7 @@ Our current RF global model (MAE 1.035 across all players) is a reasonable start
 - **A-F10** — Fixed `spearman_rho` always NULL: `picks_df` now passed to `append_accuracy_log`
 - **A-F11** — Fixed `recommended_pts` fragile name-matching: now reads directly from `squad_recommend_gw{N}.csv`
 - **A-F12** — 6 new E2E tests in `TestPostGwDiscord` covering accuracy log fields, Discord script output, and GW-finished detection
+- **A-F13** — Fixed `TestPostGwDiscord` test fixture: picks mock now includes `"position"` and `"multiplier"` keys; squad CSVs now include `is_starter`/`is_captain`/`is_vice_captain`/`bench_order` columns (fixed 2026-04-22 on Track C branch)
 
 **Refactoring (same branch):**
 - `availability.py`: replaced `iterrows` with vectorized `np.select` + boolean masking (10× faster); logging at INFO level

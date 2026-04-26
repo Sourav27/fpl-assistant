@@ -1,20 +1,8 @@
-GW34 -> GW35 (deadline transition)
-
-**Price up +£0.1m 📈**
-• B.Fernandes (MUN)  £10.3 → £10.4
-• Bowen (WHU)  £7.7 → £7.8
-• Cunha (MUN)  £8.0 → £8.1
-• Gibbs-White (NFO)  £7.5 → £7.6
-• Igor Jesus (NFO)  £5.8 → £5.9
-• Pedro Porro (TOT)  £5.1 → £5.2
-• Rogers (AVL)  £7.4 → £7.5
-• Solanke (TOT)  £7.2 → £7.3
-• Watkins (AVL)  £8.7 → £8.8
-• Xavi (TOT)  £6.5 → £6.6
+GW35 day-over-day
 
 **Price down -£0.1m 📉**
-• Angel (WOL)  £4.7 → £4.6
-• Mbeumo (MUN)  £8.5 → £8.4
-• O.Dango (BRE)  £5.9 → £5.8
-• Rayan (BOU)  £5.5 → £5.4
-• Schade (BRE)  £7.0 → £6.9
+• Iwobi (FUL)  £6.3 → £6.2
+• Van den Berg (BRE)  £4.6 → £4.5
+
+**New entries 🆕**
+• Wright (LIV)  £4.5

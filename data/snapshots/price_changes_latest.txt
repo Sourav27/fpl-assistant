@@ -1,23 +1,11 @@
-GW35 -> GW36 (deadline transition)
+GW36 day-over-day
 
 **Price up +£0.1m 📈**
-• Calvert-Lewin (LEE)  £5.7 → £5.8
-• Darlow (LEE)  £3.9 → £4.0
-• Eze (ARS)  £7.2 → £7.3
-• Justin (LEE)  £3.9 → £4.0
-• Muñoz (CRY)  £5.8 → £5.9
-• Raya (ARS)  £6.0 → £6.1
-• Struijk (LEE)  £4.3 → £4.4
+• Gibbs-White (NFO)  £7.6 → £7.7
+• Sarr (CRY)  £6.3 → £6.4
 
 **Price down -£0.1m 📉**
-• Dalot (MUN)  £4.6 → £4.5
-• Ekitiké (LIV)  £9.1 → £9.0
-• Garner (EVE)  £5.3 → £5.2
-• Hall (NEW)  £5.4 → £5.3
-• J.Timber (ARS)  £6.1 → £6.0
-• Mané (WOL)  £4.3 → £4.2
-• Semenyo (MCI)  £8.2 → £8.1
-• Solanke (TOT)  £7.2 → £7.1
-• Szoboszlai (LIV)  £7.1 → £7.0
-• Wilson (FUL)  £6.0 → £5.9
-• Xavi (TOT)  £6.5 → £6.4
+• Palmer (CHE)  £10.5 → £10.4
+
+**New entries 🆕**
+• Gracey (WOL)  £4.0

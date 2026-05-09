@@ -1,11 +1,20 @@
 GW36 day-over-day
 
 **Price up +£0.1m 📈**
-• Groß (BHA)  £5.5 → £5.6
-• Haaland (MCI)  £14.6 → £14.7
-• Saliba (ARS)  £6.1 → £6.2
+• Doku (MCI)  £6.4 → £6.5
+• O'Reilly (MCI)  £5.2 → £5.3
+• Verbruggen (BHA)  £4.5 → £4.6
+• Welbeck (BHA)  £6.3 → £6.4
 
 **Price down -£0.1m 📉**
-• Gusto (CHE)  £4.9 → £4.8
-• Schade (BRE)  £6.9 → £6.8
-• Thiago (BRE)  £7.4 → £7.3
+• Andrey Santos (CHE)  £4.5 → £4.4
+• Bowen (WHU)  £7.8 → £7.7
+• Gibbs-White (NFO)  £7.7 → £7.6
+• Gordon (NEW)  £7.4 → £7.3
+• Mbeumo (MUN)  £8.4 → £8.3
+• Merino (ARS)  £5.4 → £5.3
+• Palmer (CHE)  £10.4 → £10.3
+• Scott (BOU)  £5.1 → £5.0
+• Struijk (LEE)  £4.4 → £4.3
+• Summerville (WHU)  £5.5 → £5.4
+• Thiaw (NEW)  £5.0 → £4.9
